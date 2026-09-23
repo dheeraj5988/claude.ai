@@ -20,20 +20,17 @@ interface ModelSelectorDropdownProps {
   dropDirection?: 'up' | 'down';
 }
 
-export const CLAUDE_MODELS_REDESIGN = [
+export const MAIN_MODELS = [
   {
     id: 'fable-5-1' as const,
     name: 'Fable 5.1',
-    infoBadge: 'Pro or Max',
+    requiresCredits: true,
     subtitle: 'For your toughest challenges',
-    upgradeBadge: 'Upgrade',
   },
   {
     id: 'opus-5-5' as const,
     name: 'Opus 5.5',
-    badge: 'Pro',
     subtitle: 'Most capable for ambitious work',
-    upgradeBadge: 'Upgrade',
   },
   {
     id: 'sonnet-5' as const,
@@ -44,6 +41,38 @@ export const CLAUDE_MODELS_REDESIGN = [
     id: 'haiku-4-5' as const,
     name: 'Haiku 4.5',
     subtitle: 'Fastest for quick answers',
+  },
+];
+
+export const MORE_MODELS: { id: ModelId; name: string; requiresCredits?: boolean }[] = [
+  {
+    id: 'fable-5',
+    name: 'Fable 5',
+    requiresCredits: true,
+  },
+  {
+    id: 'opus-5',
+    name: 'Opus 5',
+  },
+  {
+    id: 'opus-4-8',
+    name: 'Opus 4.8',
+  },
+  {
+    id: 'opus-4-7',
+    name: 'Opus 4.7',
+  },
+  {
+    id: 'opus-4-6',
+    name: 'Opus 4.6',
+  },
+  {
+    id: 'opus-3',
+    name: 'Opus 3',
+  },
+  {
+    id: 'sonnet-4-6',
+    name: 'Sonnet 4.6',
   },
 ];
 
@@ -59,7 +88,8 @@ export const ModelSelectorDropdown: React.FC<ModelSelectorDropdownProps> = ({
   onShowToast,
   dropDirection = 'down',
 }) => {
-  const [effortPanelOpen, setEffortPanelOpen] = useState(true);
+  // Default to 'more-models' flyout open matching Screenshot 1!
+  const [activeSubmenu, setActiveSubmenu] = useState<'effort' | 'more-models' | null>('more-models');
   const [flyoutSide, setFlyoutSide] = useState<'right' | 'left'>('right');
   const dropdownRef = useRef<HTMLDivElement>(null);
   const modelBoxRef = useRef<HTMLDivElement>(null);
@@ -76,18 +106,18 @@ export const ModelSelectorDropdown: React.FC<ModelSelectorDropdownProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen, onClose]);
 
-  // Lock model box in place, and adjust effort flyout side if near screen edge
+  // Adjust flyout side if near edge of screen
   useEffect(() => {
     if (isOpen && modelBoxRef.current) {
       const rect = modelBoxRef.current.getBoundingClientRect();
       const spaceRight = window.innerWidth - rect.right;
-      if (spaceRight < 325) {
+      if (spaceRight < 330) {
         setFlyoutSide('left');
       } else {
         setFlyoutSide('right');
       }
     }
-  }, [isOpen, effortPanelOpen]);
+  }, [isOpen, activeSubmenu]);
 
   if (!isOpen) return null;
 
@@ -101,13 +131,13 @@ export const ModelSelectorDropdown: React.FC<ModelSelectorDropdownProps> = ({
       }`}
       style={{ width: '310px' }}
     >
-      {/* 1. MODEL SELECTION BOX - COMPLETELY LOCKED IN POSITION */}
+      {/* 1. MAIN MODEL SELECTION BOX (Screenshot 1) */}
       <div
         ref={modelBoxRef}
-        className="w-[310px] rounded-2xl bg-[#1E1E1D] border border-[#343432] shadow-2xl p-2.5 text-left relative"
+        className="w-[310px] rounded-2xl bg-[#1C1C1B] border border-[#343432] shadow-2xl p-2.5 text-left relative"
       >
         <div className="space-y-1">
-          {CLAUDE_MODELS_REDESIGN.map(m => {
+          {MAIN_MODELS.map(m => {
             const isSelected = currentModel === m.id;
 
             return (
@@ -121,19 +151,14 @@ export const ModelSelectorDropdown: React.FC<ModelSelectorDropdownProps> = ({
                 className="w-full text-left p-2.5 rounded-xl hover:bg-[#2A2A29] transition group flex items-start justify-between cursor-pointer"
               >
                 <div className="flex-1 min-w-0 pr-2">
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="font-medium text-sm text-[#E6E6E3] group-hover:text-white">
                       {m.name}
                     </span>
-                    {m.infoBadge && (
-                      <span className="text-[11px] px-1.5 py-0.5 rounded bg-[#2D2D2C] text-[#A0A09D] font-normal flex items-center gap-1">
+                    {m.requiresCredits && (
+                      <span className="text-[11px] px-1.5 py-0.5 rounded-md bg-[#282827] text-[#9E9E9C] border border-[#3A3A38] font-normal flex items-center gap-1">
                         <Info className="w-3 h-3 text-[#8E8E8B]" />
-                        <span>{m.infoBadge}</span>
-                      </span>
-                    )}
-                    {m.badge && (
-                      <span className="text-[11px] px-1.5 py-0.5 rounded bg-[#2D2D2C] text-[#A0A09D] font-normal">
-                        {m.badge}
+                        <span>Requires usage credits</span>
                       </span>
                     )}
                   </div>
@@ -143,20 +168,19 @@ export const ModelSelectorDropdown: React.FC<ModelSelectorDropdownProps> = ({
                 </div>
 
                 <div className="shrink-0 flex items-center pt-0.5">
-                  {isSelected && (
-                    <Check className="w-4 h-4 text-[#3B82F6] stroke-[2.5]" />
-                  )}
-                  {!isSelected && m.upgradeBadge && (
+                  {m.requiresCredits ? (
                     <span
                       onClick={e => {
                         e.stopPropagation();
-                        onShowToast?.(`${m.name} is included in Pro or Max plans.`);
+                        onShowToast?.('Usage credits are required for Fable models.');
                       }}
-                      className="text-xs text-[#3B82F6] hover:underline font-medium cursor-pointer"
+                      className="px-2.5 py-1 rounded-md bg-[#0C1D38] hover:bg-[#122A4E] text-[#4D92FF] text-xs font-medium transition cursor-pointer"
                     >
-                      {m.upgradeBadge}
+                      Buy credits
                     </span>
-                  )}
+                  ) : isSelected ? (
+                    <Check className="w-4 h-4 text-[#3B82F6] stroke-[2.5]" />
+                  ) : null}
                 </div>
               </button>
             );
@@ -168,9 +192,9 @@ export const ModelSelectorDropdown: React.FC<ModelSelectorDropdownProps> = ({
           {/* Effort Row */}
           <button
             type="button"
-            onClick={() => setEffortPanelOpen(!effortPanelOpen)}
+            onClick={() => setActiveSubmenu(activeSubmenu === 'effort' ? null : 'effort')}
             className={`w-full text-left px-2.5 py-2 rounded-xl transition flex items-center justify-between cursor-pointer ${
-              effortPanelOpen
+              activeSubmenu === 'effort'
                 ? 'bg-[#2A2A29] text-white'
                 : 'text-[#E6E6E3] hover:bg-[#2A2A29]'
             }`}
@@ -182,14 +206,15 @@ export const ModelSelectorDropdown: React.FC<ModelSelectorDropdownProps> = ({
             </div>
           </button>
 
-          {/* Divider */}
-          <div className="border-t border-[#2F2F2D] my-1" />
-
-          {/* More Models Row */}
+          {/* More Models Row (Screenshot 1) */}
           <button
             type="button"
-            onClick={() => onShowToast?.('More models are coming soon.')}
-            className="w-full text-left px-2.5 py-2 rounded-xl hover:bg-[#2A2A29] transition flex items-center justify-between cursor-pointer text-[#E6E6E3]"
+            onClick={() => setActiveSubmenu(activeSubmenu === 'more-models' ? null : 'more-models')}
+            className={`w-full text-left px-2.5 py-2 rounded-xl transition flex items-center justify-between cursor-pointer ${
+              activeSubmenu === 'more-models'
+                ? 'bg-[#2A2A29] text-white'
+                : 'text-[#E6E6E3] hover:bg-[#2A2A29]'
+            }`}
           >
             <span className="text-sm font-normal">More models</span>
             <ChevronRight className="w-3.5 h-3.5 text-[#8E8E8B]" />
@@ -208,10 +233,67 @@ export const ModelSelectorDropdown: React.FC<ModelSelectorDropdownProps> = ({
         </div>
       </div>
 
-      {/* 2. EFFORT PANEL - FLYOUT (ABSOLUTE POSITIONED, ZERO SHIFT TO MODEL BOX) */}
-      {effortPanelOpen && (
+      {/* 2. MORE MODELS PANEL - FLYOUT (Screenshot 1) */}
+      {activeSubmenu === 'more-models' && (
         <div
-          className={`absolute w-[310px] rounded-2xl bg-[#1E1E1D] border border-[#343432] shadow-2xl p-3 text-left animate-in fade-in duration-100 ${
+          className={`absolute w-[290px] rounded-2xl bg-[#1C1C1B] border border-[#343432] shadow-2xl p-2.5 text-left animate-in fade-in duration-100 ${
+            isUp ? 'bottom-0' : 'top-0'
+          } ${
+            flyoutSide === 'right' ? 'left-full ml-2' : 'right-full mr-2'
+          }`}
+        >
+          <div className="space-y-0.5">
+            {MORE_MODELS.map(m => {
+              const isSelected = currentModel === m.id;
+
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => {
+                    onSelectModel(m.id);
+                    onClose();
+                  }}
+                  className="w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-left hover:bg-[#2A2A29] transition group cursor-pointer"
+                >
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-sm font-normal text-[#E6E6E3] group-hover:text-white">
+                      {m.name}
+                    </span>
+                    {m.requiresCredits && (
+                      <span className="text-[11px] px-1.5 py-0.5 rounded-md bg-[#282827] text-[#9E9E9C] border border-[#3A3A38] font-normal flex items-center gap-1">
+                        <Info className="w-3 h-3 text-[#8E8E8B]" />
+                        <span>Requires usage credits</span>
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="shrink-0 flex items-center">
+                    {m.requiresCredits ? (
+                      <span
+                        onClick={e => {
+                          e.stopPropagation();
+                          onShowToast?.('Usage credits are required for Fable models.');
+                        }}
+                        className="px-2.5 py-1 rounded-md bg-[#0C1D38] hover:bg-[#122A4E] text-[#4D92FF] text-xs font-medium transition cursor-pointer"
+                      >
+                        Buy credits
+                      </span>
+                    ) : isSelected ? (
+                      <Check className="w-4 h-4 text-[#3B82F6] stroke-[2.5]" />
+                    ) : null}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 3. EFFORT PANEL - FLYOUT */}
+      {activeSubmenu === 'effort' && (
+        <div
+          className={`absolute w-[310px] rounded-2xl bg-[#1C1C1B] border border-[#343432] shadow-2xl p-3 text-left animate-in fade-in duration-100 ${
             isUp ? 'bottom-0' : 'top-0'
           } ${
             flyoutSide === 'right' ? 'left-full ml-2' : 'right-full mr-2'

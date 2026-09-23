@@ -1,4 +1,15 @@
-export type ModelId = 'fable-5-1' | 'opus-5-5' | 'sonnet-5' | 'haiku-4-5';
+export type ModelId =
+  | 'fable-5-1'
+  | 'opus-5-5'
+  | 'sonnet-5'
+  | 'haiku-4-5'
+  | 'fable-5'
+  | 'opus-5'
+  | 'opus-4-8'
+  | 'opus-4-7'
+  | 'opus-4-6'
+  | 'opus-3'
+  | 'sonnet-4-6';
 
 export type EffortLevel = 'Low' | 'Medium' | 'High' | 'Extra' | 'Max';
 

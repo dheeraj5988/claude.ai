@@ -24,11 +24,14 @@ interface HeaderProps {
 
 export const AVAILABLE_MODELS: ModelOption[] = [
   {
+    id: 'fable-5-1',
+    name: 'Fable 5.1',
+    subtitle: 'For your toughest challenges',
+  },
+  {
     id: 'opus-5-5',
     name: 'Opus 5.5',
     subtitle: 'Most capable for ambitious work',
-    badge: 'Pro',
-    upgradeBadge: 'Upgrade',
   },
   {
     id: 'sonnet-5',
@@ -39,6 +42,41 @@ export const AVAILABLE_MODELS: ModelOption[] = [
     id: 'haiku-4-5',
     name: 'Haiku 4.5',
     subtitle: 'Fastest for quick answers',
+  },
+  {
+    id: 'fable-5',
+    name: 'Fable 5',
+    subtitle: 'Pinnacle intelligence',
+  },
+  {
+    id: 'opus-5',
+    name: 'Opus 5',
+    subtitle: 'Ambitious reasoning',
+  },
+  {
+    id: 'opus-4-8',
+    name: 'Opus 4.8',
+    subtitle: 'Deep architecture',
+  },
+  {
+    id: 'opus-4-7',
+    name: 'Opus 4.7',
+    subtitle: 'System engineering',
+  },
+  {
+    id: 'opus-4-6',
+    name: 'Opus 4.6',
+    subtitle: 'Deep algorithmic solutions',
+  },
+  {
+    id: 'opus-3',
+    name: 'Opus 3',
+    subtitle: 'Foundational reasoning',
+  },
+  {
+    id: 'sonnet-4-6',
+    name: 'Sonnet 4.6',
+    subtitle: 'Efficient software development',
   },
 ];
 

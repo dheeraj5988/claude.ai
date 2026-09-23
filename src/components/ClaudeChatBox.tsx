@@ -64,8 +64,22 @@ export const ClaudeChatBox: React.FC<ClaudeChatBoxProps> = ({
     switch (currentModel) {
       case 'fable-5-1':
         return 'Fable 5.1';
+      case 'fable-5':
+        return 'Fable 5';
       case 'opus-5-5':
         return 'Opus 5.5';
+      case 'opus-5':
+        return 'Opus 5';
+      case 'opus-4-8':
+        return 'Opus 4.8';
+      case 'opus-4-7':
+        return 'Opus 4.7';
+      case 'opus-4-6':
+        return 'Opus 4.6';
+      case 'opus-3':
+        return 'Opus 3';
+      case 'sonnet-4-6':
+        return 'Sonnet 4.6';
       case 'haiku-4-5':
         return 'Haiku 4.5';
       case 'sonnet-5':

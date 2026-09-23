@@ -1,12 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Message, Artifact, ModelId } from '../types';
 import { MarkdownRenderer } from './MarkdownRenderer';
-import { ThinkingBox } from './ThinkingBox';
 import { ClaudeSunburst } from './ClaudeSunburst';
 import {
   FileCode,
-  ExternalLink,
-  Code2,
   AlertCircle,
   RotateCw,
   ThumbsUp,
@@ -69,17 +66,6 @@ export const ChatFeed: React.FC<ChatFeedProps> = ({
         /* Assistant Message matching Screenshot 1, 7 & 8 */
         return (
           <div key={message.id} className="group flex flex-col items-start w-full">
-            {/* Thinking Block if any */}
-            {(message.thought || message.isThinking) && (
-              <div className="w-full mb-3">
-                <ThinkingBox
-                  thought={message.thought || ''}
-                  isThinking={message.isThinking}
-                  durationSeconds={message.thoughtDurationSeconds}
-                />
-              </div>
-            )}
-
             {/* Assistant Content text */}
             <div className="w-full text-[#EDEDEB] text-[15px] leading-relaxed">
               <MarkdownRenderer
@@ -88,42 +74,8 @@ export const ChatFeed: React.FC<ChatFeedProps> = ({
               />
             </div>
 
-            {/* Artifact Cards if any */}
-            {message.artifacts && message.artifacts.length > 0 && (
-              <div className="mt-3 space-y-2 w-full">
-                {message.artifacts.map(art => (
-                  <div
-                    key={art.id}
-                    onClick={() => onOpenArtifact(art)}
-                    className="p-3.5 rounded-2xl bg-[#1F1F1E] hover:bg-[#282827] border border-[#363634] flex items-center justify-between cursor-pointer transition group shadow-xs"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center shrink-0">
-                        <Code2 className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <div className="font-medium text-xs text-[#E6E6E3] flex items-center gap-2">
-                          <span>{art.title || art.filename}</span>
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#2A2A29] text-[#A0A09D] uppercase font-mono">
-                            {art.language}
-                          </span>
-                        </div>
-                        <div className="text-[11px] text-[#8E8E8B]">
-                          Click to open and interact in Artifact Canvas
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1 text-[#DE7959] text-xs font-medium group-hover:translate-x-1 transition-transform">
-                      <span>Canvas</span>
-                      <ExternalLink className="w-3.5 h-3.5" />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
             {/* Streaming pulse cursor */}
-            {message.status === 'streaming' && !message.isThinking && (
+            {message.status === 'streaming' && (
               <span className="inline-block w-2 h-4 bg-[#DE7959] ml-1 animate-pulse align-middle" />
             )}
 
@@ -198,7 +150,7 @@ function AssistantMessageActions({
   };
 
   return (
-    <div className="flex items-center gap-1 mt-2.5 text-[#8E8E8B] opacity-0 group-hover:opacity-100 transition-opacity duration-150 select-none">
+    <div className="flex items-center gap-1 mt-2.5 text-[#8E8E8B] opacity-100 transition-opacity duration-150 select-none">
       {/* 1. Copy Button (Screenshot 2) */}
       <div className="relative group/btn flex items-center justify-center">
         <button

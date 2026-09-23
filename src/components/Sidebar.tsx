@@ -13,9 +13,12 @@ import {
   PanelLeftClose,
   SlidersHorizontal,
   MessageSquare,
-  Code
+  Code,
+  Shield,
+  LogOut
 } from 'lucide-react';
 import { ChatSession } from '../types';
+import { useAuth } from '../context/AuthContext';
 
 interface SidebarProps {
   sessions: ChatSession[];
@@ -29,6 +32,7 @@ interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
   onShowToast?: (msg: string) => void;
+  onOpenAdmin?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -43,7 +47,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpen,
   onClose,
   onShowToast,
+  onOpenAdmin,
 }) => {
+  const { currentUser, logout } = useAuth();
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [pinnedOpen, setPinnedOpen] = useState(false);
@@ -87,30 +94,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
           isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         }`}
       >
-        {/* Top: Claude Brand & Icons matching Screenshot 8 */}
+        {/* Top: Claude Brand */}
         <div className="px-3.5 pt-3.5 pb-2 flex items-center justify-between">
           <span className="font-serif text-[19px] font-normal tracking-tight text-[#EDEDEB] select-none">
             Claude
           </span>
-          <div className="flex items-center gap-0.5 bg-[#232322] border border-[#343432] rounded-lg p-0.5 text-[#8E8E8B]">
-            <button
-              onClick={() => onShowToast?.('Chat history')}
-              className="p-1 rounded hover:text-white hover:bg-[#2C2C2B] transition cursor-pointer"
-              title="Chats"
-            >
-              <MessageSquare className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => {
-                onOpenPlayground();
-                if (window.innerWidth < 1024) onClose();
-              }}
-              className="p-1 rounded hover:text-white hover:bg-[#2C2C2B] transition cursor-pointer"
-              title="Artifact Canvas"
-            >
-              <Code className="w-3.5 h-3.5" />
-            </button>
-          </div>
         </div>
 
         {/* Top: + New Button */}
@@ -157,16 +145,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <span>Projects</span>
           </button>
 
-          {/* Artifacts */}
+          {/* Artifacts (completely disabled non-working button) */}
           <button
-            onClick={() => {
-              onOpenPlayground();
-              if (window.innerWidth < 1024) onClose();
-            }}
-            className="w-full flex items-center gap-3 px-2.5 py-2 rounded-xl hover:text-white hover:bg-[#222221] transition cursor-pointer text-left"
+            type="button"
+            disabled
+            className="w-full flex items-center gap-3 px-2.5 py-2 rounded-xl text-[#6B6B68] opacity-60 cursor-default text-left select-none"
+            title="Artifacts (disabled)"
           >
             <svg
-              className="w-4 h-4 text-[#9E9E9C] shrink-0"
+              className="w-4 h-4 text-[#6B6B68] shrink-0"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -274,6 +261,83 @@ export const Sidebar: React.FC<SidebarProps> = ({
             )}
           </div>
         </div>
+
+        {/* Bottom User Bar matching Screenshots 1 & 2 */}
+        {currentUser && (
+          <div className="p-2 border-t border-[#252524] relative">
+            {/* Popover Menu above the username (Screenshot 2) */}
+            {userMenuOpen && (
+              <div className="absolute bottom-full left-2 right-2 mb-1.5 rounded-2xl bg-[#1C1C1B] border border-[#343432] shadow-2xl p-1.5 z-50 text-left animate-in fade-in duration-100">
+                {/* User email matching Screenshot 2 */}
+                <div className="px-3 py-2 text-xs font-normal text-[#8E8E8B] truncate border-b border-[#282827] mb-1">
+                  {currentUser.email}
+                </div>
+
+                {/* Admin Panel button to manage user IDs and passwords */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUserMenuOpen(false);
+                    onOpenAdmin?.();
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-normal text-[#EDEDEB] hover:bg-[#282827] transition cursor-pointer"
+                >
+                  <Shield className="w-3.5 h-3.5 text-[#DE7959]" />
+                  <span>Admin Panel</span>
+                </button>
+
+                {/* Log out button (User request: "keep only log out button in above the username and plan is like pro") */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUserMenuOpen(false);
+                    logout();
+                    onShowToast?.('Logged out successfully');
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-normal text-[#EDEDEB] hover:bg-[#282827] transition cursor-pointer"
+                >
+                  <LogOut className="w-3.5 h-3.5 text-[#9E9E9C]" />
+                  <span>Log out</span>
+                </button>
+              </div>
+            )}
+
+            {/* Clickable User Bar (Screenshot 1 & 2) */}
+            <div
+              onClick={() => setUserMenuOpen(!userMenuOpen)}
+              className="w-full flex items-center justify-between px-2.5 py-2 rounded-xl hover:bg-[#222221] transition cursor-pointer select-none"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                {/* Blue Grid/Avatar Icon matching Screenshot 1 & 2 */}
+                <div className="w-6 h-6 rounded-lg bg-[#3B82F6] flex items-center justify-center text-white shrink-0 shadow-xs">
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                    <circle cx="6" cy="6" r="2" />
+                    <circle cx="12" cy="6" r="2" />
+                    <circle cx="18" cy="6" r="2" />
+                    <circle cx="6" cy="12" r="2" />
+                    <circle cx="12" cy="12" r="2" />
+                    <circle cx="18" cy="12" r="2" />
+                    <circle cx="6" cy="18" r="2" />
+                    <circle cx="12" cy="18" r="2" />
+                    <circle cx="18" cy="18" r="2" />
+                  </svg>
+                </div>
+
+                <div className="flex items-center gap-1.5 text-sm font-medium text-[#EDEDEB] truncate">
+                  <span>{currentUser.id}</span>
+                  <span className="text-xs text-[#787875]">·</span>
+                  <span className="text-xs font-normal text-[#9E9E9C]">{currentUser.plan}</span>
+                </div>
+              </div>
+
+              <ChevronDown
+                className={`w-3.5 h-3.5 text-[#787875] shrink-0 transition-transform ${
+                  userMenuOpen ? 'rotate-180' : ''
+                }`}
+              />
+            </div>
+          </div>
+        )}
       </aside>
     </>
   );

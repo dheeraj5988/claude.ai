@@ -5,19 +5,18 @@ import { ChatFeed } from './components/ChatFeed';
 import { ClaudeChatBox } from './components/ClaudeChatBox';
 import { ClaudeSunburst } from './components/ClaudeSunburst';
 import { CoworkModal } from './components/CoworkModal';
-import { ArtifactPanel } from './components/ArtifactPanel';
+import { ChatTitleDropdown } from './components/ChatTitleDropdown';
 import { CodeSnippetModal } from './components/CodeSnippetModal';
 import { SettingsModal } from './components/SettingsModal';
+import { AdminPanelModal } from './components/AdminPanelModal';
+import { LoginModal } from './components/LoginModal';
+import { useAuth } from './context/AuthContext';
+import { getRandomGreeting } from './utils/greeting';
 import { Artifact, Attachment } from './types';
-import {
-  PanelRightOpen,
-  PanelRightClose,
-  ChevronDown
-} from 'lucide-react';
-
 import { ClaudeToast } from './components/ClaudeToast';
 
 export default function App() {
+  const { currentUser } = useAuth();
   const {
     sessions,
     activeSession,
@@ -49,7 +48,23 @@ export default function App() {
   const [coworkModalOpen, setCoworkModalOpen] = useState(false);
   const [snippetModalOpen, setSnippetModalOpen] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+  const [adminModalOpen, setAdminModalOpen] = useState(false);
   const [appToastMessage, setAppToastMessage] = useState<string | null>(null);
+
+  // Dynamic greeting tailored to user and time of day, changing on each new chat
+  const [dynamicGreeting, setDynamicGreeting] = useState(() =>
+    getRandomGreeting(currentUser?.name || currentUser?.id || 'Aashish')
+  );
+
+  const hasMessages = (activeSession?.messages || []).length > 0;
+
+  useEffect(() => {
+    if (!hasMessages) {
+      setDynamicGreeting(
+        getRandomGreeting(currentUser?.name || currentUser?.id || 'Aashish')
+      );
+    }
+  }, [activeSessionId, currentUser?.name, currentUser?.id, hasMessages]);
 
   // Always enforce dark theme matching the screenshot
   useEffect(() => {
@@ -119,7 +134,6 @@ export default function App() {
     setIsArtifactPanelOpen(true);
   };
 
-  const hasMessages = (activeSession?.messages.length || 0) > 0;
   const hasAnyArtifacts =
     (activeSession?.messages.some(m => (m.artifacts?.length || 0) > 0) ?? false) ||
     activeArtifact !== null;
@@ -139,43 +153,22 @@ export default function App() {
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         onShowToast={msg => setAppToastMessage(msg)}
+        onOpenAdmin={() => setAdminModalOpen(true)}
       />
 
       {/* Main App Container */}
       <div className="flex-1 flex flex-col h-full min-w-0 relative overflow-hidden bg-[#141413]">
-        {/* Floating Canvas Toggle (only shown when an Artifact is active) */}
-        {hasAnyArtifacts && (
-          <div className="absolute top-3 right-4 z-30">
-            <button
-              onClick={() => setIsArtifactPanelOpen(!isArtifactPanelOpen)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs transition border cursor-pointer ${
-                isArtifactPanelOpen
-                  ? 'bg-[#DE7959] text-white border-[#DE7959]'
-                  : 'bg-[#1F1F1E] text-[#C4C4C2] border-[#323230] hover:bg-[#282827]'
-              }`}
-              title="Toggle Artifact Canvas"
-            >
-              {isArtifactPanelOpen ? (
-                <PanelRightClose className="w-3.5 h-3.5" />
-              ) : (
-                <PanelRightOpen className="w-3.5 h-3.5" />
-              )}
-              <span>Canvas</span>
-            </button>
-          </div>
-        )}
-
         {/* Viewport Content */}
         <div className="flex-1 flex overflow-hidden relative">
           <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden relative">
             {!hasMessages ? (
               /* SCREENSHOT 1: Center-aligned Hero View */
               <div className="flex-1 flex flex-col items-center justify-center px-4 w-full max-w-3xl mx-auto -mt-12">
-                {/* Coral Star + Moonlit chat? Header */}
-                <div className="flex items-center justify-center gap-3 mb-6 select-none">
-                  <ClaudeSunburst size={30} />
+                {/* Coral Star + Dynamic User Greeting matching prompt instructions */}
+                <div className="flex items-center justify-center gap-3 mb-6 select-none text-center px-4">
+                  <ClaudeSunburst size={32} />
                   <h1 className="font-serif text-3xl md:text-4xl text-[#EDEDEB] tracking-tight font-normal">
-                    Moonlit chat?
+                    {dynamicGreeting}
                   </h1>
                 </div>
 
@@ -197,22 +190,9 @@ export default function App() {
             ) : (
               /* Ongoing Conversation View matching Screenshots 7 & 8 */
               <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden">
-                {/* Header: Session Title Dropdown matching Screenshots 7 & 8 */}
+                {/* Header: Session Title Dropdown matching Screenshots 1 & 2 */}
                 <div className="h-10 px-4 md:px-6 flex items-center shrink-0 z-10">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const newTitle = prompt('Rename conversation:', activeSession?.title);
-                      if (newTitle && newTitle.trim()) {
-                        renameChat(activeSession.id, newTitle.trim());
-                      }
-                    }}
-                    className="flex items-center gap-1.5 text-sm font-normal text-[#C4C4C2] hover:text-white px-2 py-1 rounded-lg hover:bg-[#1E1E1D] transition cursor-pointer select-none"
-                    title="Rename conversation"
-                  >
-                    <span className="truncate max-w-sm">{activeSession?.title || 'Model identification'}</span>
-                    <ChevronDown className="w-3.5 h-3.5 text-[#8E8E8B]" />
-                  </button>
+                  <ChatTitleDropdown title={activeSession?.title || 'hello which model are you'} />
                 </div>
 
                 <ChatFeed
@@ -241,15 +221,6 @@ export default function App() {
               </div>
             )}
           </div>
-
-          {/* Artifacts Canvas Panel */}
-          <ArtifactPanel
-            artifact={activeArtifact}
-            isOpen={isArtifactPanelOpen}
-            onClose={() => setIsArtifactPanelOpen(false)}
-            onUpdateCode={updateArtifactCode}
-            onQuickPrompt={prompt => sendMessage(prompt)}
-          />
         </div>
       </div>
 
@@ -285,6 +256,20 @@ export default function App() {
           window.location.reload();
         }}
       />
+      {/* Admin Panel Modal (Protected with password Dheeraj@10) */}
+      <AdminPanelModal
+        isOpen={adminModalOpen}
+        onClose={() => setAdminModalOpen(false)}
+        onShowToast={msg => setAppToastMessage(msg)}
+      />
+
+      {/* Login Modal (shown when logged out) */}
+      <LoginModal
+        isOpen={!currentUser}
+        onOpenAdmin={() => setAdminModalOpen(true)}
+        onShowToast={msg => setAppToastMessage(msg)}
+      />
+
       {/* Claude Toast for Sidebar & General Notices */}
       <ClaudeToast
         message={appToastMessage}
