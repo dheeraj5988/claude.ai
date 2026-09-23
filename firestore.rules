@@ -1,0 +1,29 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default fallback deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Connection testing endpoint
+    match /test/{docId} {
+      allow read, write: if true;
+    }
+
+    // User accounts registry (accessible for login verification, managed by admin)
+    match /users/{userId} {
+      allow read, write: if true;
+    }
+
+    // App branding and active logo settings
+    match /settings/{settingId} {
+      allow read, write: if true;
+    }
+
+    // Real-time live connected user sessions
+    match /sessions/{sessionId} {
+      allow read, write: if true;
+    }
+  }
+}

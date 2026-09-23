@@ -1,0 +1,104 @@
+{
+  "entities": {
+    "UserAccount": {
+      "title": "UserAccount",
+      "description": "User account credentials and profile managed by admin",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique username or account ID"
+        },
+        "name": {
+          "type": "string",
+          "description": "User display name"
+        },
+        "email": {
+          "type": "string",
+          "description": "User email address"
+        },
+        "password": {
+          "type": "string",
+          "description": "Password set by admin"
+        },
+        "plan": {
+          "type": "string",
+          "enum": ["Pro", "Free", "Max"],
+          "description": "Account subscription plan"
+        },
+        "createdAt": {
+          "type": "number",
+          "description": "Timestamp when account was created"
+        },
+        "lastActiveAt": {
+          "type": "number",
+          "description": "Timestamp of latest activity"
+        }
+      },
+      "required": ["id", "password"]
+    },
+    "AppSettings": {
+      "title": "AppSettings",
+      "description": "Global application branding and configuration",
+      "type": "object",
+      "properties": {
+        "activeLogo": {
+          "type": "object",
+          "description": "The selected active logo configuration"
+        },
+        "updatedAt": {
+          "type": "number",
+          "description": "Last updated timestamp"
+        }
+      }
+    },
+    "LiveSession": {
+      "title": "LiveSession",
+      "description": "Tracks active online user sessions",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Active user ID"
+        },
+        "userName": {
+          "type": "string",
+          "description": "Active user display name"
+        },
+        "userEmail": {
+          "type": "string",
+          "description": "Active user email"
+        },
+        "plan": {
+          "type": "string",
+          "description": "Active user plan"
+        },
+        "lastActiveAt": {
+          "type": "number",
+          "description": "Heartbeat timestamp"
+        }
+      },
+      "required": ["userId", "lastActiveAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/UserAccount"
+      },
+      "description": "Stores user accounts and credentials set by admin"
+    },
+    "/settings/{settingId}": {
+      "schema": {
+        "$ref": "#/entities/AppSettings"
+      },
+      "description": "Stores global app branding and logo selections"
+    },
+    "/sessions/{sessionId}": {
+      "schema": {
+        "$ref": "#/entities/LiveSession"
+      },
+      "description": "Tracks active live users across devices"
+    }
+  }
+}

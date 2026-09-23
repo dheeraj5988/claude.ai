@@ -33,6 +33,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   const {
     users,
     currentUser,
+    liveUsers,
     isAdmin,
     loginAdmin,
     logoutAdmin,
@@ -72,7 +73,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     }
   };
 
-  const handleCreateUser = (e: React.FormEvent) => {
+  const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
     setFormSuccess('');
@@ -82,7 +83,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       return;
     }
 
-    const success = addUser({
+    const success = await addUser({
       id: newId.trim(),
       name: newName.trim() || newId.trim(),
       email: newEmail.trim() || `${newId.trim().toLowerCase()}@example.com`,
@@ -272,7 +273,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                   }`}
                 >
                   <Activity className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Live Users (1 Online)</span>
+                  <span>Live Users ({liveUsers.length} Online)</span>
                 </button>
 
                 <button
@@ -482,31 +483,38 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                     </div>
 
                     <div className="space-y-2 pt-2">
-                      {currentUser ? (
-                        <div className="p-3 rounded-xl bg-[#1C1C1B] border border-[#383836] flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-[#3B82F6]/20 text-[#3B82F6] flex items-center justify-center font-bold text-xs">
-                              {currentUser.id.slice(0, 2).toUpperCase()}
-                            </div>
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <span className="font-medium text-sm text-[#EDEDEB]">{currentUser.id}</span>
-                                <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded-full font-medium">
-                                  Active Now
-                                </span>
+                      {liveUsers.length > 0 ? (
+                        liveUsers.map(session => (
+                          <div
+                            key={session.sessionId}
+                            className="p-3 rounded-xl bg-[#1C1C1B] border border-[#383836] flex items-center justify-between"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full bg-[#3B82F6]/20 text-[#3B82F6] flex items-center justify-center font-bold text-xs">
+                                {session.userId.slice(0, 2).toUpperCase()}
                               </div>
-                              <div className="text-xs text-[#8E8E8B]">{currentUser.email} · Plan: {currentUser.plan}</div>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium text-sm text-[#EDEDEB]">{session.userId}</span>
+                                  <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded-full font-medium">
+                                    Active Now
+                                  </span>
+                                </div>
+                                <div className="text-xs text-[#8E8E8B]">{session.userEmail} · Plan: {session.plan}</div>
+                              </div>
+                            </div>
+
+                            <div className="text-right text-xs text-[#8E8E8B]">
+                              <div>Session: #{session.sessionId}</div>
+                              <div className="text-[11px] text-[#A0A09D]">
+                                Heartbeat: {Math.max(0, Math.round((Date.now() - session.lastActiveAt) / 1000))}s ago
+                              </div>
                             </div>
                           </div>
-
-                          <div className="text-right text-xs text-[#8E8E8B]">
-                            <div>Session ID: #ses-{currentUser.id.toLowerCase()}</div>
-                            <div className="text-[11px] text-[#A0A09D]">Current active device</div>
-                          </div>
-                        </div>
+                        ))
                       ) : (
                         <div className="p-4 text-center text-xs text-[#8E8E8B] italic">
-                          No users are currently logged in.
+                          No users are currently connected.
                         </div>
                       )}
                     </div>
