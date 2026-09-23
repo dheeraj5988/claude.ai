@@ -183,15 +183,35 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
         <div className="p-6 overflow-y-auto space-y-6 flex-1">
           {!isAdmin ? (
             /* Admin Password Prompt */
-            <form onSubmit={handleAdminAuth} className="max-w-md mx-auto py-8 text-center space-y-4">
-              <div className="w-12 h-12 rounded-2xl bg-[#282827] border border-[#383836] mx-auto flex items-center justify-center text-[#DE7959]">
+            <form onSubmit={handleAdminAuth} className="max-w-md mx-auto py-6 text-center space-y-4">
+              <div className="w-12 h-12 rounded-2xl bg-[#DE7959]/10 border border-[#DE7959]/20 mx-auto flex items-center justify-center text-[#DE7959]">
                 <KeyRound className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="text-base font-medium text-[#EDEDEB]">Enter Admin Password</h3>
+                <h3 className="text-lg font-medium text-[#EDEDEB]">Admin Authentication</h3>
                 <p className="text-xs text-[#8E8E8B] mt-1">
-                  Access is protected. Please enter the master password to manage users.
+                  Access protected: enter the master administrator password to manage user accounts, live sessions, and branding.
                 </p>
+              </div>
+
+              {/* Master Credential Info Badge so the admin always knows their password */}
+              <div className="p-3.5 rounded-2xl bg-[#252524] border border-[#3A3A38] text-left flex items-center justify-between">
+                <div>
+                  <div className="text-[11px] text-[#A0A09D]">Admin Master Password:</div>
+                  <div className="text-sm font-mono text-[#EDEDEB] font-semibold tracking-wider">
+                    {ADMIN_PASSWORD}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPasswordInput(ADMIN_PASSWORD);
+                    setAuthError('');
+                  }}
+                  className="px-2.5 py-1.5 rounded-xl bg-[#323230] hover:bg-[#3D3D3A] text-xs text-[#DE7959] border border-[#484845] transition cursor-pointer font-medium"
+                >
+                  Auto-fill Password
+                </button>
               </div>
 
               <div className="space-y-2">
@@ -214,6 +234,14 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                 className="w-full py-2.5 px-4 rounded-xl bg-[#DE7959] hover:bg-[#C9684A] text-white text-sm font-medium transition cursor-pointer shadow-md"
               >
                 Unlock Admin Dashboard
+              </button>
+
+              <button
+                type="button"
+                onClick={onClose}
+                className="text-xs text-[#8E8E8B] hover:text-[#EDEDEB] transition cursor-pointer pt-2 block mx-auto"
+              >
+                Return to Claude Chat
               </button>
             </form>
           ) : (

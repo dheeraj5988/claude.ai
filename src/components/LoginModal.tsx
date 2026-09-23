@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, ADMIN_PASSWORD } from '../context/AuthContext';
 import { ArrowRight, AlertCircle } from 'lucide-react';
 
 interface LoginModalProps {
@@ -11,7 +11,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   isOpen,
   onShowToast,
 }) => {
-  const { login, users } = useAuth();
+  const { login, loginAdmin } = useAuth();
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -22,13 +22,28 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     e.preventDefault();
     setError('');
 
-    if (!identifier.trim() || !password.trim()) {
+    const cleanId = identifier.trim().toLowerCase();
+    const cleanPass = password.trim();
+
+    if (!cleanId || !cleanPass) {
       setError('Please enter your username/email and password.');
       return;
     }
 
-    if (login(identifier, password)) {
-      onShowToast?.(`Welcome back, ${identifier}!`);
+    // Direct Administrator login shortcut from main screen
+    if (
+      (cleanId === 'admin' || cleanId === 'dheeraj' || cleanId.includes('admin')) &&
+      cleanPass === ADMIN_PASSWORD
+    ) {
+      loginAdmin(cleanPass);
+      window.history.pushState({}, '', '/admin');
+      window.dispatchEvent(new Event('popstate'));
+      onShowToast?.('Logged in as Administrator');
+      return;
+    }
+
+    if (login(cleanId, cleanPass)) {
+      onShowToast?.(`Welcome back, ${identifier.trim()}!`);
     } else {
       setError('Invalid username or password. Please use credentials set by your administrator.');
     }

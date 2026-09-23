@@ -299,9 +299,9 @@ export default function App() {
         onShowToast={msg => setAppToastMessage(msg)}
       />
 
-      {/* Login Modal (shown when logged out or on first load) */}
+      {/* Login Modal (shown when logged out and admin panel is not active) */}
       <LoginModal
-        isOpen={!currentUser}
+        isOpen={!currentUser && !adminModalOpen}
         onShowToast={msg => setAppToastMessage(msg)}
       />
 
