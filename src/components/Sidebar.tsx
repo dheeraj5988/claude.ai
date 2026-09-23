@@ -14,11 +14,11 @@ import {
   SlidersHorizontal,
   MessageSquare,
   Code,
-  Shield,
   LogOut
 } from 'lucide-react';
 import { ChatSession } from '../types';
 import { useAuth } from '../context/AuthContext';
+import { AppLogoIcon } from '../logos/AppLogoIcon';
 
 interface SidebarProps {
   sessions: ChatSession[];
@@ -32,7 +32,6 @@ interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
   onShowToast?: (msg: string) => void;
-  onOpenAdmin?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -47,9 +46,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpen,
   onClose,
   onShowToast,
-  onOpenAdmin,
 }) => {
-  const { currentUser, logout } = useAuth();
+  const { currentUser, logout, activeLogo } = useAuth();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
@@ -96,9 +94,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       >
         {/* Top: Claude Brand */}
         <div className="px-3.5 pt-3.5 pb-2 flex items-center justify-between">
-          <span className="font-serif text-[19px] font-normal tracking-tight text-[#EDEDEB] select-none">
-            Claude
-          </span>
+          <div className="flex items-center gap-2">
+            <AppLogoIcon logo={activeLogo} size={20} />
+            <span className="font-serif text-[19px] font-normal tracking-tight text-[#EDEDEB] select-none">
+              Claude
+            </span>
+          </div>
         </div>
 
         {/* Top: + New Button */}
@@ -272,19 +273,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <div className="px-3 py-2 text-xs font-normal text-[#8E8E8B] truncate border-b border-[#282827] mb-1">
                   {currentUser.email}
                 </div>
-
-                {/* Admin Panel button to manage user IDs and passwords */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setUserMenuOpen(false);
-                    onOpenAdmin?.();
-                  }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-normal text-[#EDEDEB] hover:bg-[#282827] transition cursor-pointer"
-                >
-                  <Shield className="w-3.5 h-3.5 text-[#DE7959]" />
-                  <span>Admin Panel</span>
-                </button>
 
                 {/* Log out button (User request: "keep only log out button in above the username and plan is like pro") */}
                 <button

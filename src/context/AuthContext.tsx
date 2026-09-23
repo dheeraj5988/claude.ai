@@ -1,12 +1,14 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { AppLogo, AVAILABLE_LOGOS } from '../logos';
 
 export interface UserAccount {
   id: string; // e.g. "Aashish09"
   name: string; // e.g. "Aashish"
   email: string; // e.g. "ankitasharma19890507@gmail.com"
-  password: string; // user password
+  password: string; // user password set by admin
   plan: 'Pro' | 'Free' | 'Max';
   createdAt: number;
+  lastActiveAt?: number;
 }
 
 const DEFAULT_USERS: UserAccount[] = [
@@ -17,6 +19,7 @@ const DEFAULT_USERS: UserAccount[] = [
     password: 'password123',
     plan: 'Pro',
     createdAt: Date.now() - 86400000 * 7,
+    lastActiveAt: Date.now(),
   },
 ];
 
@@ -24,20 +27,23 @@ interface AuthContextType {
   currentUser: UserAccount | null;
   users: UserAccount[];
   isAdmin: boolean;
+  activeLogo: AppLogo;
+  setActiveLogo: (logo: AppLogo) => void;
   login: (idOrEmail: string, pass: string) => boolean;
   logout: () => void;
   loginAdmin: (pass: string) => boolean;
   logoutAdmin: () => void;
-  addUser: (user: Omit<UserAccount, 'createdAt'>) => boolean;
+  addUser: (user: Omit<UserAccount, 'createdAt' | 'lastActiveAt'>) => boolean;
   deleteUser: (userId: string) => boolean;
   updateUserPassword: (userId: string, newPass: string) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const USERS_STORAGE_KEY = 'claude_users_registry_v1';
-const CURRENT_USER_KEY = 'claude_active_user_v1';
-const ADMIN_AUTH_KEY = 'claude_admin_unlocked_v1';
+const USERS_STORAGE_KEY = 'claude_users_registry_v2';
+const CURRENT_USER_KEY = 'claude_active_user_v2';
+const ADMIN_AUTH_KEY = 'claude_admin_unlocked_v2';
+const ACTIVE_LOGO_KEY = 'claude_app_logo_v1';
 
 export const ADMIN_PASSWORD = 'Dheeraj@10';
 
@@ -55,6 +61,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return DEFAULT_USERS;
   });
 
+  // FIRST TIME OPENING: Prompt for login details (start as null if not already authenticated)
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => {
     try {
       const stored = localStorage.getItem(CURRENT_USER_KEY);
@@ -65,13 +72,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch {
       // fallback
     }
-    // Default logged in user matching Screenshot
-    return DEFAULT_USERS[0];
+    // Explicit requirement: "while first time opening the website it should ask the details of login"
+    return null;
   });
 
   const [isAdmin, setIsAdmin] = useState<boolean>(() => {
     return sessionStorage.getItem(ADMIN_AUTH_KEY) === 'true';
   });
+
+  const [activeLogo, setActiveLogoState] = useState<AppLogo>(() => {
+    try {
+      const stored = localStorage.getItem(ACTIVE_LOGO_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && parsed.id) return parsed;
+      }
+    } catch {
+      // fallback
+    }
+    return AVAILABLE_LOGOS[0];
+  });
+
+  const setActiveLogo = (logo: AppLogo) => {
+    setActiveLogoState(logo);
+    try {
+      localStorage.setItem(ACTIVE_LOGO_KEY, JSON.stringify(logo));
+    } catch {
+      // ignore
+    }
+  };
 
   // Save users registry
   useEffect(() => {
@@ -104,7 +133,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
 
     if (found) {
-      setCurrentUser(found);
+      const updatedUser = { ...found, lastActiveAt: Date.now() };
+      setCurrentUser(updatedUser);
+      setUsers(prev => prev.map(u => (u.id === found.id ? updatedUser : u)));
       return true;
     }
     return false;
@@ -128,7 +159,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     sessionStorage.removeItem(ADMIN_AUTH_KEY);
   };
 
-  const addUser = (userData: Omit<UserAccount, 'createdAt'>): boolean => {
+  const addUser = (userData: Omit<UserAccount, 'createdAt' | 'lastActiveAt'>): boolean => {
     const exists = users.some(
       u => u.id.toLowerCase() === userData.id.toLowerCase() || u.email.toLowerCase() === userData.email.toLowerCase()
     );
@@ -137,6 +168,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const newUser: UserAccount = {
       ...userData,
       createdAt: Date.now(),
+      lastActiveAt: Date.now(),
     };
 
     setUsers(prev => [newUser, ...prev]);
@@ -146,8 +178,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const deleteUser = (userId: string): boolean => {
     setUsers(prev => prev.filter(u => u.id !== userId));
     if (currentUser?.id === userId) {
-      // if current user deleted, switch to first remaining or null
-      setCurrentUser(users.find(u => u.id !== userId) || null);
+      setCurrentUser(null);
     }
     return true;
   };
@@ -168,6 +199,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         currentUser,
         users,
         isAdmin,
+        activeLogo,
+        setActiveLogo,
         login,
         logout,
         loginAdmin,

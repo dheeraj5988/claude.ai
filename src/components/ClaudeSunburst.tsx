@@ -3,11 +3,13 @@ import React from 'react';
 interface ClaudeSunburstProps {
   className?: string;
   size?: number;
+  color?: string;
 }
 
 export const ClaudeSunburst: React.FC<ClaudeSunburstProps> = ({
   className = 'w-7 h-7',
   size = 28,
+  color = '#DE7959',
 }) => {
   // Generate 16 radiating spokes for Claude's exact coral asterisk
   const spokes = Array.from({ length: 16 }, (_, i) => {
@@ -37,7 +39,7 @@ export const ClaudeSunburst: React.FC<ClaudeSunburstProps> = ({
           y1={s.y1}
           x2={s.x2}
           y2={s.y2}
-          stroke="#DE7959"
+          stroke={color}
           strokeWidth="2.2"
           strokeLinecap="round"
         />

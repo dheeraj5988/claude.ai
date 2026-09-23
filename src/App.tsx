@@ -12,11 +12,12 @@ import { AdminPanelModal } from './components/AdminPanelModal';
 import { LoginModal } from './components/LoginModal';
 import { useAuth } from './context/AuthContext';
 import { getRandomGreeting } from './utils/greeting';
+import { AppLogoIcon } from './logos/AppLogoIcon';
 import { Artifact, Attachment } from './types';
 import { ClaudeToast } from './components/ClaudeToast';
 
 export default function App() {
-  const { currentUser } = useAuth();
+  const { currentUser, activeLogo } = useAuth();
   const {
     sessions,
     activeSession,
@@ -50,6 +51,42 @@ export default function App() {
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [adminModalOpen, setAdminModalOpen] = useState(false);
   const [appToastMessage, setAppToastMessage] = useState<string | null>(null);
+
+  // Check for /admin route access (accessible only via /admin path or #/admin)
+  useEffect(() => {
+    const checkAdminRoute = () => {
+      const path = window.location.pathname.toLowerCase();
+      const hash = window.location.hash.toLowerCase();
+      const search = window.location.search.toLowerCase();
+      if (
+        path === '/admin' ||
+        path.startsWith('/admin/') ||
+        hash === '#/admin' ||
+        hash === '#admin' ||
+        search.includes('admin')
+      ) {
+        setAdminModalOpen(true);
+      }
+    };
+
+    checkAdminRoute();
+    window.addEventListener('popstate', checkAdminRoute);
+    window.addEventListener('hashchange', checkAdminRoute);
+    return () => {
+      window.removeEventListener('popstate', checkAdminRoute);
+      window.removeEventListener('hashchange', checkAdminRoute);
+    };
+  }, []);
+
+  const handleCloseAdmin = () => {
+    setAdminModalOpen(false);
+    if (window.location.pathname.toLowerCase().startsWith('/admin')) {
+      window.history.pushState({}, '', '/');
+    }
+    if (window.location.hash.toLowerCase().includes('admin')) {
+      window.location.hash = '';
+    }
+  };
 
   // Dynamic greeting tailored to user and time of day, changing on each new chat
   const [dynamicGreeting, setDynamicGreeting] = useState(() =>
@@ -153,7 +190,6 @@ export default function App() {
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         onShowToast={msg => setAppToastMessage(msg)}
-        onOpenAdmin={() => setAdminModalOpen(true)}
       />
 
       {/* Main App Container */}
@@ -164,9 +200,9 @@ export default function App() {
             {!hasMessages ? (
               /* SCREENSHOT 1: Center-aligned Hero View */
               <div className="flex-1 flex flex-col items-center justify-center px-4 w-full max-w-3xl mx-auto -mt-12">
-                {/* Coral Star + Dynamic User Greeting matching prompt instructions */}
+                {/* Coral Star / Selected Logo + Dynamic User Greeting */}
                 <div className="flex items-center justify-center gap-3 mb-6 select-none text-center px-4">
-                  <ClaudeSunburst size={32} />
+                  <AppLogoIcon logo={activeLogo} size={32} />
                   <h1 className="font-serif text-3xl md:text-4xl text-[#EDEDEB] tracking-tight font-normal">
                     {dynamicGreeting}
                   </h1>
@@ -256,17 +292,16 @@ export default function App() {
           window.location.reload();
         }}
       />
-      {/* Admin Panel Modal (Protected with password Dheeraj@10) */}
+      {/* Admin Panel Modal (Protected with password Dheeraj@10, accessed via /admin) */}
       <AdminPanelModal
         isOpen={adminModalOpen}
-        onClose={() => setAdminModalOpen(false)}
+        onClose={handleCloseAdmin}
         onShowToast={msg => setAppToastMessage(msg)}
       />
 
-      {/* Login Modal (shown when logged out) */}
+      {/* Login Modal (shown when logged out or on first load) */}
       <LoginModal
         isOpen={!currentUser}
-        onOpenAdmin={() => setAdminModalOpen(true)}
         onShowToast={msg => setAppToastMessage(msg)}
       />
 
