@@ -3,12 +3,11 @@ import { useChat } from './hooks/useChat';
 import { Sidebar } from './components/Sidebar';
 import { ChatFeed } from './components/ChatFeed';
 import { ClaudeChatBox } from './components/ClaudeChatBox';
-import { ClaudeSunburst } from './components/ClaudeSunburst';
 import { CoworkModal } from './components/CoworkModal';
 import { ChatTitleDropdown } from './components/ChatTitleDropdown';
 import { CodeSnippetModal } from './components/CodeSnippetModal';
 import { SettingsModal } from './components/SettingsModal';
-import { AdminPanelModal } from './components/AdminPanelModal';
+import { AdminPage } from './pages/AdminPage';
 import { LoginModal } from './components/LoginModal';
 import { useAuth } from './context/AuthContext';
 import { getRandomGreeting } from './utils/greeting';
@@ -49,42 +48,62 @@ export default function App() {
   const [coworkModalOpen, setCoworkModalOpen] = useState(false);
   const [snippetModalOpen, setSnippetModalOpen] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
-  const [adminModalOpen, setAdminModalOpen] = useState(false);
   const [appToastMessage, setAppToastMessage] = useState<string | null>(null);
 
-  // Check for /admin route access (accessible only via /admin path or #/admin)
+  // Dedicated Route State: 'chat' or 'admin' (complete separate webpage, NOT a popup modal)
+  const [currentRoute, setCurrentRoute] = useState<'chat' | 'admin'>(() => {
+    const path = window.location.pathname.toLowerCase();
+    const hash = window.location.hash.toLowerCase();
+    const search = window.location.search.toLowerCase();
+    if (
+      path === '/admin' ||
+      path.startsWith('/admin') ||
+      hash === '#/admin' ||
+      hash === '#admin' ||
+      search.includes('admin')
+    ) {
+      return 'admin';
+    }
+    return 'chat';
+  });
+
+  // Synchronize route with URL bar changes (popstate & hashchange)
   useEffect(() => {
-    const checkAdminRoute = () => {
+    const checkRoute = () => {
       const path = window.location.pathname.toLowerCase();
       const hash = window.location.hash.toLowerCase();
       const search = window.location.search.toLowerCase();
       if (
         path === '/admin' ||
-        path.startsWith('/admin/') ||
+        path.startsWith('/admin') ||
         hash === '#/admin' ||
         hash === '#admin' ||
         search.includes('admin')
       ) {
-        setAdminModalOpen(true);
+        setCurrentRoute('admin');
+      } else {
+        setCurrentRoute('chat');
       }
     };
 
-    checkAdminRoute();
-    window.addEventListener('popstate', checkAdminRoute);
-    window.addEventListener('hashchange', checkAdminRoute);
+    checkRoute();
+    window.addEventListener('popstate', checkRoute);
+    window.addEventListener('hashchange', checkRoute);
     return () => {
-      window.removeEventListener('popstate', checkAdminRoute);
-      window.removeEventListener('hashchange', checkAdminRoute);
+      window.removeEventListener('popstate', checkRoute);
+      window.removeEventListener('hashchange', checkRoute);
     };
   }, []);
 
-  const handleCloseAdmin = () => {
-    setAdminModalOpen(false);
-    if (window.location.pathname.toLowerCase().startsWith('/admin')) {
+  const navigateTo = (route: 'chat' | 'admin') => {
+    setCurrentRoute(route);
+    if (route === 'admin') {
+      window.history.pushState({}, '', '/admin');
+    } else {
       window.history.pushState({}, '', '/');
-    }
-    if (window.location.hash.toLowerCase().includes('admin')) {
-      window.location.hash = '';
+      if (window.location.hash.includes('admin')) {
+        window.location.hash = '';
+      }
     }
   };
 
@@ -171,10 +190,28 @@ export default function App() {
     setIsArtifactPanelOpen(true);
   };
 
-  const hasAnyArtifacts =
-    (activeSession?.messages.some(m => (m.artifacts?.length || 0) > 0) ?? false) ||
-    activeArtifact !== null;
+  // =========================================================================
+  // ROUTE 1: DEDICATED ADMIN WEBPAGE (/admin)
+  // Complete standalone webpage, NOT a popup modal
+  // =========================================================================
+  if (currentRoute === 'admin') {
+    return (
+      <>
+        <AdminPage
+          onNavigateHome={() => navigateTo('chat')}
+          onShowToast={msg => setAppToastMessage(msg)}
+        />
+        <ClaudeToast
+          message={appToastMessage}
+          onClose={() => setAppToastMessage(null)}
+        />
+      </>
+    );
+  }
 
+  // =========================================================================
+  // ROUTE 2: CLAUDE USER CHAT APPLICATION (/)
+  // =========================================================================
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#141413] text-[#EDEDEB] font-sans antialiased selection:bg-[#DE7959]/30">
       {/* Sidebar for Chat History */}
@@ -190,6 +227,7 @@ export default function App() {
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         onShowToast={msg => setAppToastMessage(msg)}
+        onOpenAdmin={() => navigateTo('admin')}
       />
 
       {/* Main App Container */}
@@ -198,7 +236,7 @@ export default function App() {
         <div className="flex-1 flex overflow-hidden relative">
           <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden relative">
             {!hasMessages ? (
-              /* SCREENSHOT 1: Center-aligned Hero View */
+              /* Hero View */
               <div className="flex-1 flex flex-col items-center justify-center px-4 w-full max-w-3xl mx-auto -mt-12">
                 {/* Coral Star / Selected Logo + Dynamic User Greeting */}
                 <div className="flex items-center justify-center gap-3 mb-6 select-none text-center px-4">
@@ -224,9 +262,9 @@ export default function App() {
                 />
               </div>
             ) : (
-              /* Ongoing Conversation View matching Screenshots 7 & 8 */
+              /* Ongoing Conversation View */
               <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden">
-                {/* Header: Session Title Dropdown matching Screenshots 1 & 2 */}
+                {/* Header: Session Title Dropdown */}
                 <div className="h-10 px-4 md:px-6 flex items-center shrink-0 z-10">
                   <ChatTitleDropdown title={activeSession?.title || 'hello which model are you'} />
                 </div>
@@ -238,7 +276,7 @@ export default function App() {
                   onRetry={retryLastMessage}
                 />
 
-                {/* Docked Chatbox at bottom matching Screenshots 7 & 8 */}
+                {/* Docked Chatbox at bottom */}
                 <div className="px-3 md:px-6 pb-3 pt-1 w-full max-w-3xl mx-auto">
                   <ClaudeChatBox
                     onSendMessage={sendMessage}
@@ -292,16 +330,10 @@ export default function App() {
           window.location.reload();
         }}
       />
-      {/* Admin Panel Modal (Protected with password Dheeraj@10, accessed via /admin) */}
-      <AdminPanelModal
-        isOpen={adminModalOpen}
-        onClose={handleCloseAdmin}
-        onShowToast={msg => setAppToastMessage(msg)}
-      />
 
-      {/* Login Modal (shown when logged out and admin panel is not active) */}
+      {/* Login Modal (shown only when logged out in chat view) */}
       <LoginModal
-        isOpen={!currentUser && !adminModalOpen}
+        isOpen={!currentUser}
         onShowToast={msg => setAppToastMessage(msg)}
       />
 

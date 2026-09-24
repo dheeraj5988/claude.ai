@@ -122,6 +122,19 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             >
               Continue with credentials
             </button>
+
+            <div className="pt-2 text-center">
+              <button
+                type="button"
+                onClick={() => {
+                  window.history.pushState({}, '', '/admin');
+                  window.dispatchEvent(new Event('popstate'));
+                }}
+                className="text-[11px] text-[#787875] hover:text-[#DE7959] transition cursor-pointer"
+              >
+                Go to Administrator Portal (/admin) →
+              </button>
+            </div>
           </form>
         </div>
       </div>

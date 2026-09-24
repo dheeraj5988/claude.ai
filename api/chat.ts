@@ -1,29 +1,5 @@
-import express, { Request, Response } from 'express';
-import dotenv from 'dotenv';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import type { IncomingMessage, ServerResponse } from 'http';
 import { GoogleGenAI } from '@google/genai';
-
-dotenv.config();
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const app = express();
-const PORT = 3000;
-
-app.use(express.json({ limit: '20mb' }));
-
-const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '';
-
-const ai = new GoogleGenAI({
-  apiKey,
-  httpOptions: {
-    headers: {
-      'User-Agent': 'aistudio-build',
-    },
-  },
-});
 
 // Candidate models for graceful fallback if one experiences 503 high demand
 const CANDIDATE_MODELS = [
@@ -35,9 +11,7 @@ const CANDIDATE_MODELS = [
 // Model personas tailored for dheeraj-claude
 function getSystemPromptForModel(
   modelId: string,
-  customSystemPrompt?: string,
-  _thinkingEnabled?: boolean,
-  _effort?: string
+  customSystemPrompt?: string
 ): string {
   let modelPersona = '';
 
@@ -111,13 +85,11 @@ Core Capabilities & Guidelines:
   return fullPrompt;
 }
 
-// Helper to sanitize error messages so raw JSON isn't sent to the user
 function sanitizeErrorMessage(err: any): string {
   if (!err) return 'An unexpected error occurred. Please try again.';
 
   let raw = err.message || String(err);
   try {
-    // Check if error message is a stringified JSON
     if (raw.includes('{') && raw.includes('}')) {
       const match = raw.match(/\{[\s\S]*\}/);
       if (match) {
@@ -143,47 +115,92 @@ function sanitizeErrorMessage(err: any): string {
   return raw;
 }
 
-app.get('/api/health', (_req: Request, res: Response) => {
-  res.json({
-    status: 'ok',
-    appName: 'dheeraj-claude',
-    hasApiKey: !!process.env.GEMINI_API_KEY,
-  });
-});
+export default async function handler(req: any, res: any) {
+  // CORS setup
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization'
+  );
 
-app.post('/api/chat', async (req: Request, res: Response) => {
+  if (req.method === 'OPTIONS') {
+    res.writeHead(200);
+    res.end();
+    return;
+  }
+
+  if (req.method !== 'POST') {
+    res.writeHead(405, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Method Not Allowed. Use POST.' }));
+    return;
+  }
+
+  // Parse body
+  let body = req.body;
+  if (typeof body === 'string') {
+    try {
+      body = JSON.parse(body);
+    } catch (e) {}
+  } else if (!body) {
+    try {
+      const buffers: Buffer[] = [];
+      for await (const chunk of req) {
+        buffers.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
+      }
+      const data = Buffer.concat(buffers).toString();
+      body = JSON.parse(data);
+    } catch (e) {}
+  }
+
   const {
     messages,
     model = 'sonnet-5',
-    effort = 'Medium',
-    thinkingEnabled = true,
     customSystemPrompt,
-  } = req.body;
+  } = body || {};
 
   if (!messages || !Array.isArray(messages)) {
-    return res.status(400).json({ error: 'Messages array is required.' });
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Messages array is required.' }));
+    return;
   }
 
-  if (!process.env.GEMINI_API_KEY) {
-    return res.status(500).json({
-      error: 'GEMINI_API_KEY is not configured on the server. Please check the Secrets panel.',
-    });
+  const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '';
+  if (!apiKey) {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        error:
+          'GEMINI_API_KEY is not configured in Vercel Environment Variables. Please go to your Vercel Project -> Settings -> Environment Variables, add GEMINI_API_KEY, and redeploy.',
+      })
+    );
+    return;
   }
 
   // Set up SSE headers
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache, no-transform');
-  res.setHeader('Connection', 'keep-alive');
-  res.flushHeaders?.();
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    'Connection': 'keep-alive',
+  });
 
   const sendEvent = (event: string, data: any) => {
     res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
   };
 
   try {
-    const systemInstruction = getSystemPromptForModel(model, customSystemPrompt, thinkingEnabled, effort);
+    const ai = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        },
+      },
+    });
 
-    // Format chat history for Google GenAI SDK
+    const systemInstruction = getSystemPromptForModel(model, customSystemPrompt);
+
     const contents = messages.map((msg: { role: string; content: string; attachments?: any[] }) => {
       const parts: any[] = [];
 
@@ -205,14 +222,12 @@ app.post('/api/chat', async (req: Request, res: Response) => {
       };
     });
 
-    // Model fallback execution to protect against transient 503 / high demand spikes
     let responseStream: any = null;
     let successfulModel = '';
     let lastError: any = null;
 
     for (const candidateModel of CANDIDATE_MODELS) {
       try {
-        console.log(`[dheeraj-claude] Calling ${candidateModel} for Claude emulation (${model})...`);
         responseStream = await ai.models.generateContentStream({
           model: candidateModel,
           contents,
@@ -222,12 +237,10 @@ app.post('/api/chat', async (req: Request, res: Response) => {
           },
         });
         successfulModel = candidateModel;
-        break; // Successfully initiated stream!
+        break;
       } catch (err: any) {
-        console.warn(`[dheeraj-claude] ${candidateModel} returned error:`, err?.message || err);
         lastError = err;
-        // Wait 250ms before trying the next candidate model
-        await new Promise(r => setTimeout(r, 250));
+        await new Promise(r => setTimeout(r, 200));
       }
     }
 
@@ -235,14 +248,12 @@ app.post('/api/chat', async (req: Request, res: Response) => {
       throw lastError || new Error('All model candidates are currently experiencing high demand.');
     }
 
-    // Stream model indicator to client so user knows it's active
     sendEvent('model_info', {
       claudeModel: model,
       backendEngine: successfulModel,
     });
 
     let accumulatedText = '';
-
     for await (const chunk of responseStream) {
       const chunkText = chunk.text || '';
       if (!chunkText) continue;
@@ -254,44 +265,10 @@ app.post('/api/chat', async (req: Request, res: Response) => {
     sendEvent('done', { fullText: accumulatedText });
     res.end();
   } catch (error: any) {
-    console.error('Error generating chat response:', error);
     const cleanError = sanitizeErrorMessage(error);
     sendEvent('error', {
       message: cleanError,
     });
     res.end();
   }
-});
-
-// Run code helper endpoint for safe JS execution or code linting
-app.post('/api/validate-code', async (req: Request, res: Response) => {
-  const { code, language } = req.body;
-  res.json({
-    valid: true,
-    lines: (code || '').split('\n').length,
-    chars: (code || '').length,
-    language,
-  });
-});
-
-async function startServer() {
-  if (process.env.NODE_ENV === 'production') {
-    app.use(express.static(path.resolve(__dirname, 'dist')));
-    app.get('*', (_req: Request, res: Response) => {
-      res.sendFile(path.resolve(__dirname, 'dist', 'index.html'));
-    });
-  } else {
-    const { createServer } = await import('vite');
-    const vite = await createServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
-  }
-
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[dheeraj-claude] Server running on http://localhost:${PORT}`);
-  });
 }
-
-startServer();

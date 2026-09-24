@@ -14,7 +14,8 @@ import {
   SlidersHorizontal,
   MessageSquare,
   Code,
-  LogOut
+  LogOut,
+  Shield
 } from 'lucide-react';
 import { ChatSession } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -32,6 +33,7 @@ interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
   onShowToast?: (msg: string) => void;
+  onOpenAdmin?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -46,6 +48,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpen,
   onClose,
   onShowToast,
+  onOpenAdmin,
 }) => {
   const { currentUser, logout, activeLogo } = useAuth();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -274,7 +277,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   {currentUser.email}
                 </div>
 
-                {/* Log out button (User request: "keep only log out button in above the username and plan is like pro") */}
+                {/* Admin Portal */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUserMenuOpen(false);
+                    onOpenAdmin?.();
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-normal text-[#EDEDEB] hover:bg-[#282827] transition cursor-pointer"
+                >
+                  <Shield className="w-3.5 h-3.5 text-[#DE7959]" />
+                  <span>Admin Portal (/admin)</span>
+                </button>
+
+                {/* Log out button */}
                 <button
                   type="button"
                   onClick={() => {

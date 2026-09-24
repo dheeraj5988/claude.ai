@@ -383,8 +383,18 @@ export function useChat() {
         });
 
         if (!res.ok) {
-          const errorData = await res.json().catch(() => ({}));
-          throw new Error(errorData.error || `Server responded with status ${res.status}`);
+          let errorMsg = '';
+          try {
+            const errorData = await res.json();
+            errorMsg = errorData.error || errorData.message || '';
+          } catch (e) {
+            const raw = await res.text().catch(() => '');
+            if (raw.includes('<!DOCTYPE') || raw.includes('<html')) {
+              errorMsg =
+                'AI route /api/chat returned HTML instead of API response. Please verify vercel.json and ensure GEMINI_API_KEY is configured in your Vercel Project Settings -> Environment Variables.';
+            }
+          }
+          throw new Error(errorMsg || `Server responded with status ${res.status}`);
         }
 
         const reader = res.body?.getReader();
