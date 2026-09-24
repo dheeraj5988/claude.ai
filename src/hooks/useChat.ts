@@ -369,6 +369,19 @@ export function useChat() {
           attachments: m.attachments,
         }));
 
+        let claudeApiKey: string | undefined;
+        let claudeModel: string | undefined;
+        let claudeFirstCount: number | undefined;
+        try {
+          const saved = localStorage.getItem('claude_api_settings_v2');
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            if (parsed.apiKey) claudeApiKey = parsed.apiKey;
+            if (parsed.model) claudeModel = parsed.model;
+            if (parsed.firstMessagesCount) claudeFirstCount = parsed.firstMessagesCount;
+          }
+        } catch {}
+
         const res = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -378,6 +391,9 @@ export function useChat() {
             effort,
             thinkingEnabled,
             customSystemPrompt: currentChat?.customSystemPrompt,
+            claudeApiKey,
+            claudeModel,
+            claudeFirstCount: claudeFirstCount || 2,
           }),
           signal: controller.signal,
         });

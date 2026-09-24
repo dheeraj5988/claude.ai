@@ -115,6 +115,95 @@ function sanitizeErrorMessage(err: any): string {
   return raw;
 }
 
+async function streamAnthropicChat({
+  apiKey,
+  model,
+  systemInstruction,
+  messages,
+  onChunk,
+}: {
+  apiKey: string;
+  model: string;
+  systemInstruction: string;
+  messages: Array<{ role: string; content: string; attachments?: any[] }>;
+  onChunk: (text: string) => void;
+}): Promise<string> {
+  const anthropicMessages = messages.map(m => {
+    let content = m.content || '';
+    if (m.attachments && Array.isArray(m.attachments)) {
+      for (const att of m.attachments) {
+        if (att.type === 'code' || att.type === 'file') {
+          content += `\n\n[Attached File: ${att.name || 'snippet'} (${att.language || 'text'})]\n\`\`\`${att.language || ''}\n${att.content}\n\`\`\`\n`;
+        }
+      }
+    }
+    return {
+      role: m.role === 'assistant' ? 'assistant' : 'user',
+      content: content.trim() || '...',
+    };
+  });
+
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: model || 'claude-3-5-sonnet-20241022',
+      max_tokens: 4096,
+      system: systemInstruction,
+      messages: anthropicMessages,
+      stream: true,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(`Anthropic API error (${response.status}): ${errorBody}`);
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error('No readable stream from Anthropic API');
+
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let fullText = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || !trimmed.startsWith('data: ')) continue;
+      const dataStr = trimmed.slice(6);
+      if (dataStr === '[DONE]') continue;
+
+      try {
+        const parsed = JSON.parse(dataStr);
+        if (
+          parsed.type === 'content_block_delta' &&
+          parsed.delta?.type === 'text_delta' &&
+          parsed.delta?.text
+        ) {
+          fullText += parsed.delta.text;
+          onChunk(parsed.delta.text);
+        }
+      } catch (e) {
+        // skip non-json lines
+      }
+    }
+  }
+
+  return fullText;
+}
+
 export default async function handler(req: any, res: any) {
   // CORS setup
   res.setHeader('Access-Control-Allow-Credentials', 'true');
@@ -158,23 +247,14 @@ export default async function handler(req: any, res: any) {
     messages,
     model = 'sonnet-5',
     customSystemPrompt,
+    claudeApiKey: clientClaudeKey,
+    claudeModel: clientClaudeModel,
+    claudeFirstCount = 2,
   } = body || {};
 
   if (!messages || !Array.isArray(messages)) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'Messages array is required.' }));
-    return;
-  }
-
-  const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '';
-  if (!apiKey) {
-    res.writeHead(500, { 'Content-Type': 'application/json' });
-    res.end(
-      JSON.stringify({
-        error:
-          'GEMINI_API_KEY is not configured in Vercel Environment Variables. Please go to your Vercel Project -> Settings -> Environment Variables, add GEMINI_API_KEY, and redeploy.',
-      })
-    );
     return;
   }
 
@@ -189,6 +269,57 @@ export default async function handler(req: any, res: any) {
     res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
   };
 
+  const systemInstruction = getSystemPromptForModel(model, customSystemPrompt);
+
+  // Stealth mode: user only sees Claude model identity, no backend engine exposed
+  sendEvent('model_info', {
+    claudeModel: model,
+  });
+
+  // Calculate assistant turns to decide whether to use Claude (turn 1 & 2) or Gemini (turn 3+)
+  const priorAssistantCount = messages.filter((m: any) => m.role === 'assistant').length;
+  const claudeKey = clientClaudeKey || process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY || '';
+  const claudeModel = clientClaudeModel || process.env.CLAUDE_MODEL || 'claude-3-5-sonnet-20241022';
+  const firstCountLimit = Number(claudeFirstCount) || 2;
+
+  // RULE: First 2 messages use Claude API if configured; 3rd+ message switches to Gemini
+  const shouldUseClaude = Boolean(claudeKey && priorAssistantCount < firstCountLimit);
+
+  if (shouldUseClaude) {
+    try {
+      let claudeAccumulated = '';
+      await streamAnthropicChat({
+        apiKey: claudeKey,
+        model: claudeModel,
+        systemInstruction,
+        messages,
+        onChunk: chunkText => {
+          claudeAccumulated += chunkText;
+          sendEvent('chunk', { text: chunkText });
+        },
+      });
+
+      sendEvent('done', { fullText: claudeAccumulated });
+      res.end();
+      return;
+    } catch (claudeErr: any) {
+      console.warn('[api/chat] Claude API error, falling back to Gemini engine:', claudeErr.message);
+      // Fall through to Gemini execution below
+    }
+  }
+
+  // Gemini Execution (From message 3 onwards OR if Claude key is not configured/fallback)
+  // Gemini receives the COMPLETE messages history, so it has all knowledge of prior Claude responses!
+  const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '';
+  if (!apiKey) {
+    sendEvent('error', {
+      message:
+        'GEMINI_API_KEY is not configured in Vercel Environment Variables. Please go to your Vercel Project -> Settings -> Environment Variables, add GEMINI_API_KEY, and redeploy.',
+    });
+    res.end();
+    return;
+  }
+
   try {
     const ai = new GoogleGenAI({
       apiKey,
@@ -198,8 +329,6 @@ export default async function handler(req: any, res: any) {
         },
       },
     });
-
-    const systemInstruction = getSystemPromptForModel(model, customSystemPrompt);
 
     const contents = messages.map((msg: { role: string; content: string; attachments?: any[] }) => {
       const parts: any[] = [];
@@ -223,12 +352,12 @@ export default async function handler(req: any, res: any) {
     });
 
     let responseStream: any = null;
-    let successfulModel = '';
+    let firstChunk: any = null;
     let lastError: any = null;
 
     for (const candidateModel of CANDIDATE_MODELS) {
       try {
-        responseStream = await ai.models.generateContentStream({
+        const stream = await ai.models.generateContentStream({
           model: candidateModel,
           contents,
           config: {
@@ -236,30 +365,41 @@ export default async function handler(req: any, res: any) {
             temperature: model === 'claude-3-5-haiku' ? 0.3 : 0.7,
           },
         });
-        successfulModel = candidateModel;
+
+        const iterator = stream[Symbol.asyncIterator]();
+        const first = await iterator.next();
+        firstChunk = first;
+        responseStream = iterator;
         break;
       } catch (err: any) {
         lastError = err;
-        await new Promise(r => setTimeout(r, 200));
+        await new Promise(r => setTimeout(r, 250));
       }
     }
 
-    if (!responseStream) {
+    if (!firstChunk) {
       throw lastError || new Error('All model candidates are currently experiencing high demand.');
     }
 
-    sendEvent('model_info', {
-      claudeModel: model,
-      backendEngine: successfulModel,
-    });
-
     let accumulatedText = '';
-    for await (const chunk of responseStream) {
-      const chunkText = chunk.text || '';
-      if (!chunkText) continue;
+    if (firstChunk && !firstChunk.done && firstChunk.value) {
+      const text = firstChunk.value.text || '';
+      if (text) {
+        accumulatedText += text;
+        sendEvent('chunk', { text });
+      }
+    }
 
-      accumulatedText += chunkText;
-      sendEvent('chunk', { text: chunkText });
+    if (responseStream) {
+      while (true) {
+        const next = await responseStream.next();
+        if (next.done) break;
+        const chunkText = next.value?.text || '';
+        if (chunkText) {
+          accumulatedText += chunkText;
+          sendEvent('chunk', { text: chunkText });
+        }
+      }
     }
 
     sendEvent('done', { fullText: accumulatedText });

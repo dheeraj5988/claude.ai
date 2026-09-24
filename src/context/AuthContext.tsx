@@ -20,6 +20,13 @@ export interface UserAccount {
   lastActiveAt?: number;
 }
 
+export interface ClaudeSettings {
+  apiKey: string; // Anthropic Claude API Key
+  model: string; // e.g. "claude-3-5-sonnet-20241022"
+  enabled: boolean;
+  firstMessagesCount: number; // default: 2 (messages 1 & 2 handled by Claude, 3+ by Gemini)
+}
+
 export interface LiveSessionInfo {
   userId: string;
   userName: string;
@@ -41,6 +48,13 @@ const DEFAULT_USERS: UserAccount[] = [
   },
 ];
 
+const DEFAULT_CLAUDE_SETTINGS: ClaudeSettings = {
+  apiKey: '',
+  model: 'claude-3-5-sonnet-20241022',
+  enabled: true,
+  firstMessagesCount: 2,
+};
+
 interface AuthContextType {
   currentUser: UserAccount | null;
   users: UserAccount[];
@@ -48,6 +62,8 @@ interface AuthContextType {
   isAdmin: boolean;
   activeLogo: AppLogo;
   setActiveLogo: (logo: AppLogo) => void;
+  claudeSettings: ClaudeSettings;
+  updateClaudeSettings: (settings: Partial<ClaudeSettings>) => Promise<boolean>;
   login: (idOrEmail: string, pass: string) => boolean;
   logout: () => void;
   loginAdmin: (pass: string) => boolean;
@@ -114,6 +130,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return AVAILABLE_LOGOS[0];
   });
 
+  const [claudeSettings, setClaudeSettingsState] = useState<ClaudeSettings>(() => {
+    try {
+      const stored = localStorage.getItem('claude_api_settings_v2');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && typeof parsed === 'object') return { ...DEFAULT_CLAUDE_SETTINGS, ...parsed };
+      }
+    } catch {}
+    return DEFAULT_CLAUDE_SETTINGS;
+  });
+
   // 1. Initial Firestore connection probe
   useEffect(() => {
     validateFirestoreConnection();
@@ -154,7 +181,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
-  // 3. Real-time synchronization of active logo from Cloud Database (Firestore)
+  // 3. Real-time synchronization of active logo and Claude settings from Cloud Database (Firestore)
   useEffect(() => {
     try {
       const unsubscribe = onSnapshot(
@@ -165,6 +192,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (data?.activeLogo) {
               setActiveLogoState(data.activeLogo);
               localStorage.setItem(ACTIVE_LOGO_KEY, JSON.stringify(data.activeLogo));
+            }
+            if (data?.claudeSettings) {
+              setClaudeSettingsState(data.claudeSettings);
+              localStorage.setItem('claude_api_settings_v2', JSON.stringify(data.claudeSettings));
             }
           }
         },
@@ -360,6 +391,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return true;
   };
 
+  const updateClaudeSettings = async (settings: Partial<ClaudeSettings>): Promise<boolean> => {
+    const merged = { ...claudeSettings, ...settings };
+    setClaudeSettingsState(merged);
+    localStorage.setItem('claude_api_settings_v2', JSON.stringify(merged));
+    try {
+      await setDoc(doc(db, 'settings', 'app'), { claudeSettings: merged }, { merge: true });
+      return true;
+    } catch (e) {
+      console.warn('Could not save Claude settings to Firestore:', e);
+      return false;
+    }
+  };
+
   const liveUsersList = Object.values(liveSessions);
 
   return (
@@ -371,6 +415,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isAdmin,
         activeLogo,
         setActiveLogo,
+        claudeSettings,
+        updateClaudeSettings,
         login,
         logout,
         loginAdmin,

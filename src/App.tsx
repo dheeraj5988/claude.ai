@@ -9,6 +9,7 @@ import { CodeSnippetModal } from './components/CodeSnippetModal';
 import { SettingsModal } from './components/SettingsModal';
 import { AdminPage } from './pages/AdminPage';
 import { LoginModal } from './components/LoginModal';
+import { CenterChatLogo } from './components/CenterChatLogo';
 import { useAuth } from './context/AuthContext';
 import { getRandomGreeting } from './utils/greeting';
 import { AppLogoIcon } from './logos/AppLogoIcon';
@@ -127,6 +128,40 @@ export default function App() {
     document.documentElement.classList.add('dark');
   }, []);
 
+  // Synchronize website favicon with center logo (Claude terracotta starburst) & tab title
+  useEffect(() => {
+    const faviconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none"><g fill="#D97757"><polygon points="46,38 56,38 65,45 68,54 64,64 54,69 44,67 36,58 37,47 43,40" /><polygon points="43,39 27,8 33,3 38,12 47,37" /><polygon points="50,37 57,5 62,3 64,10 56,37" /><polygon points="58,39 79,16 84,13 86,19 63,42" /><polygon points="64,44 94,39 98,43 93,48 66,49" /><polygon points="67,51 97,59 96,65 91,66 65,58" /><polygon points="65,60 87,79 84,84 79,83 62,65" /><polygon points="60,66 74,90 69,93 64,91 56,69" /><polygon points="53,70 51,97 45,98 43,93 47,69" /><polygon points="45,68 28,90 23,87 25,82 40,65" /><polygon points="39,63 15,75 12,71 14,66 36,58" /><polygon points="36,54 2,49 1,44 6,43 36,47" /><polygon points="37,46 11,28 14,24 19,25 39,41" /><polygon points="40,41 23,17 28,14 31,18 43,39" /></g></svg>`;
+    const dataUri = `data:image/svg+xml,${encodeURIComponent(faviconSvg)}`;
+    let link = document.querySelector("link[rel*='icon']") as HTMLLinkElement | null;
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'icon';
+      document.head.appendChild(link);
+    }
+    link.type = 'image/svg+xml';
+    link.href = dataUri;
+
+    // Also update apple-touch-icon
+    let appleLink = document.querySelector("link[rel='apple-touch-icon']") as HTMLLinkElement | null;
+    if (!appleLink) {
+      appleLink = document.createElement('link');
+      appleLink.rel = 'apple-touch-icon';
+      document.head.appendChild(appleLink);
+    }
+    appleLink.href = dataUri;
+  }, []);
+
+  // Update website title shown in Chrome tab
+  useEffect(() => {
+    if (currentRoute === 'admin') {
+      document.title = 'Admin Panel · Claude';
+    } else if (activeSession && activeSession.title && activeSession.title !== 'New chat') {
+      document.title = `${activeSession.title} · Claude`;
+    } else {
+      document.title = 'Claude';
+    }
+  }, [currentRoute, activeSession?.title]);
+
   // Global keyboard shortcuts
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -238,9 +273,9 @@ export default function App() {
             {!hasMessages ? (
               /* Hero View */
               <div className="flex-1 flex flex-col items-center justify-center px-4 w-full max-w-3xl mx-auto -mt-12">
-                {/* Coral Star / Selected Logo + Dynamic User Greeting */}
-                <div className="flex items-center justify-center gap-3 mb-6 select-none text-center px-4">
-                  <AppLogoIcon logo={activeLogo} size={32} />
+                {/* Designed Center Chat Logo + Dynamic User Greeting */}
+                <div className="flex items-center justify-center gap-3.5 mb-6 select-none text-center px-4">
+                  <CenterChatLogo size={36} />
                   <h1 className="font-serif text-3xl md:text-4xl text-[#EDEDEB] tracking-tight font-normal">
                     {dynamicGreeting}
                   </h1>

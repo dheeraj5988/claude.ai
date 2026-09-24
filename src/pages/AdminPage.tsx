@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth, ADMIN_PASSWORD } from '../context/AuthContext';
 import { AVAILABLE_LOGOS, AppLogo } from '../logos';
 import { AppLogoIcon } from '../logos/AppLogoIcon';
@@ -21,12 +21,16 @@ import {
   Search,
   Database,
   Server,
-  CloudCheck,
   CheckCircle2,
-  AlertTriangle,
+  AlertCircle,
   RefreshCw,
   LogOut,
-  Sparkles
+  Sparkles,
+  Bot,
+  Zap,
+  ArrowRight,
+  Sliders,
+  CheckCircle
 } from 'lucide-react';
 
 interface AdminPageProps {
@@ -49,12 +53,32 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     deleteUser,
     activeLogo,
     setActiveLogo,
+    claudeSettings,
+    updateClaudeSettings,
   } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<'users' | 'live' | 'branding' | 'cloud'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'claude' | 'live' | 'branding' | 'cloud'>('users');
   const [passwordInput, setPasswordInput] = useState('');
   const [authError, setAuthError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Claude API Key form state
+  const [claudeKeyInput, setClaudeKeyInput] = useState(claudeSettings?.apiKey || '');
+  const [claudeModelInput, setClaudeModelInput] = useState(claudeSettings?.model || 'claude-3-5-sonnet-20241022');
+  const [claudeFirstCountInput, setClaudeFirstCountInput] = useState(claudeSettings?.firstMessagesCount ?? 2);
+  const [showClaudeKey, setShowClaudeKey] = useState(false);
+  const [claudeSaveSuccess, setClaudeSaveSuccess] = useState('');
+  const [testingClaudeKey, setTestingClaudeKey] = useState(false);
+  const [claudeTestResult, setClaudeTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  // Sync inputs with Firestore real-time updates
+  useEffect(() => {
+    if (claudeSettings) {
+      setClaudeKeyInput(claudeSettings.apiKey || '');
+      setClaudeModelInput(claudeSettings.model || 'claude-3-5-sonnet-20241022');
+      setClaudeFirstCountInput(claudeSettings.firstMessagesCount ?? 2);
+    }
+  }, [claudeSettings]);
 
   // New user form state
   const [newId, setNewId] = useState('');
@@ -108,6 +132,72 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       onShowToast?.(`User ${newId.trim()} added successfully`);
     } else {
       setFormError('A user with this ID or Email already exists.');
+    }
+  };
+
+  const handleSaveClaudeSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setClaudeSaveSuccess('');
+    setClaudeTestResult(null);
+
+    const ok = await updateClaudeSettings({
+      apiKey: claudeKeyInput.trim(),
+      model: claudeModelInput,
+      firstMessagesCount: Math.max(1, Number(claudeFirstCountInput) || 2),
+      enabled: true,
+    });
+
+    if (ok) {
+      setClaudeSaveSuccess('Claude API key and handover settings saved & synced to Cloud Firestore!');
+      onShowToast?.('Claude API settings saved successfully');
+      setTimeout(() => setClaudeSaveSuccess(''), 5000);
+    } else {
+      onShowToast?.('Failed to save settings to Firestore');
+    }
+  };
+
+  const handleTestClaudeKey = async () => {
+    const keyToTest = claudeKeyInput.trim();
+    if (!keyToTest) {
+      setClaudeTestResult({
+        success: false,
+        message: 'Please enter a Claude API key first before testing.',
+      });
+      return;
+    }
+
+    setTestingClaudeKey(true);
+    setClaudeTestResult(null);
+
+    try {
+      const res = await fetch('/api/test-claude-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          apiKey: keyToTest,
+          model: claudeModelInput,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setClaudeTestResult({
+          success: true,
+          message: 'Anthropic Claude API Key is valid and active!',
+        });
+        onShowToast?.('Claude API key verified successfully');
+      } else {
+        setClaudeTestResult({
+          success: false,
+          message: data.error || 'Failed to authenticate with Anthropic API. Please check your key.',
+        });
+      }
+    } catch (err: any) {
+      setClaudeTestResult({
+        success: false,
+        message: err.message || 'Connection failed to test Anthropic API.',
+      });
+    } finally {
+      setTestingClaudeKey(false);
     }
   };
 
@@ -216,7 +306,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                   Administrator Login
                 </h1>
                 <p className="text-xs text-[#8E8E8B] mt-1.5 max-w-xs mx-auto leading-relaxed">
-                  Enter master security credentials to access user accounts, live sessions, branding, and cloud settings.
+                  Enter master security credentials to access user accounts, Claude API handover, live sessions, branding, and cloud settings.
                 </p>
               </div>
             </div>
@@ -294,6 +384,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   // =========================================================================
   // VIEW 2: FULL DEDICATED ADMIN DASHBOARD WEBPAGE
   // =========================================================================
+  const isClaudeKeyActive = Boolean(claudeSettings?.apiKey?.trim());
+
   return (
     <div className="min-h-screen w-full bg-[#111110] text-[#EDEDEB] flex flex-col selection:bg-[#DE7959]/30">
       {/* Top Main Navigation Bar */}
@@ -370,7 +462,33 @@ export const AdminPage: React.FC<AdminPageProps> = ({
             </div>
           </div>
 
-          {/* Card 2: Live Active Users */}
+          {/* Card 2: Claude API Handover Status */}
+          <div className="p-5 rounded-2xl bg-[#171716] border border-[#272725] flex items-center justify-between">
+            <div>
+              <div className="text-xs text-[#8E8E8B] font-medium">Claude API Handover</div>
+              <div className="text-base font-bold mt-1 flex items-center gap-1.5">
+                {isClaudeKeyActive ? (
+                  <span className="text-emerald-400 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    Active (Turns 1-{claudeSettings?.firstMessagesCount ?? 2})
+                  </span>
+                ) : (
+                  <span className="text-amber-400 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-amber-400" />
+                    Gemini Emulation
+                  </span>
+                )}
+              </div>
+              <div className="text-[11px] text-[#787875] mt-1">
+                {isClaudeKeyActive ? 'Turn 3+ switches to Gemini' : 'Setup Claude API key below'}
+              </div>
+            </div>
+            <div className="w-11 h-11 rounded-2xl bg-[#DE7959]/15 border border-[#DE7959]/30 text-[#DE7959] flex items-center justify-center">
+              <KeyRound className="w-5 h-5" />
+            </div>
+          </div>
+
+          {/* Card 3: Live Active Users */}
           <div className="p-5 rounded-2xl bg-[#171716] border border-[#272725] flex items-center justify-between">
             <div>
               <div className="text-xs text-[#8E8E8B] font-medium">Online Live Sessions</div>
@@ -385,20 +503,6 @@ export const AdminPage: React.FC<AdminPageProps> = ({
             </div>
             <div className="w-11 h-11 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center">
               <Activity className="w-5 h-5" />
-            </div>
-          </div>
-
-          {/* Card 3: Active Brand Logo */}
-          <div className="p-5 rounded-2xl bg-[#171716] border border-[#272725] flex items-center justify-between">
-            <div>
-              <div className="text-xs text-[#8E8E8B] font-medium">Active Website Logo</div>
-              <div className="text-base font-semibold text-[#EDEDEB] mt-1 truncate max-w-[140px]">
-                {activeLogo.name}
-              </div>
-              <div className="text-[11px] text-[#787875] mt-1 capitalize">{activeLogo.type} format</div>
-            </div>
-            <div className="w-11 h-11 rounded-2xl bg-[#232321] border border-[#333330] flex items-center justify-center">
-              <AppLogoIcon logo={activeLogo} size={24} />
             </div>
           </div>
 
@@ -433,6 +537,22 @@ export const AdminPage: React.FC<AdminPageProps> = ({
           >
             <Users className="w-4 h-4 text-blue-400" />
             <span>User Accounts & Passwords ({users.length})</span>
+          </button>
+
+          {/* New Claude API Tab */}
+          <button
+            type="button"
+            onClick={() => setActiveTab('claude')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-medium transition cursor-pointer shrink-0 ${
+              activeTab === 'claude'
+                ? 'bg-[#252523] text-white border border-[#3A3A38]'
+                : 'text-[#8E8E8B] hover:text-white hover:bg-[#1A1A19]'
+            }`}
+          >
+            <KeyRound className="w-4 h-4 text-[#DE7959]" />
+            <span>
+              Claude API & Handover {isClaudeKeyActive ? '●' : ''}
+            </span>
           </button>
 
           <button
@@ -712,7 +832,262 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         )}
 
         {/* ================================================================= */}
-        {/* TAB 2: LIVE USERS MONITORING */}
+        {/* TAB 2: CLAUDE API KEY & HANDOVER SETTINGS */}
+        {/* ================================================================= */}
+        {activeTab === 'claude' && (
+          <div className="space-y-6">
+            {/* Visual Architecture Banner */}
+            <div className="p-6 rounded-3xl bg-gradient-to-br from-[#1C1C1B] to-[#151514] border border-[#2B2B28] shadow-xl relative overflow-hidden">
+              <div className="flex items-center gap-2.5 text-[#DE7959] mb-2">
+                <Sparkles className="w-4 h-4" />
+                <span className="text-xs font-semibold uppercase tracking-wider">
+                  Dual-Engine Handover Architecture
+                </span>
+              </div>
+              <h2 className="text-lg font-semibold text-[#EDEDEB]">
+                First 2 Messages: Claude API &rarr; Turn 3+: Gemini Engine (Full Memory)
+              </h2>
+              <p className="text-xs text-[#8E8E8B] mt-1 max-w-3xl leading-relaxed">
+                Provide your Anthropic Claude API Key below. When any user begins a chat, their <b>first 2 messages</b> are answered directly by the official Anthropic Claude API. From the <b>3rd message onwards</b>, Gemini takes over seamlessly. Gemini receives the full conversation history (all prior Claude responses) so it continues with complete memory.
+                <b> In stealth mode</b>: nothing is shown to the user indicating when Gemini takes over.
+              </p>
+
+              {/* Visual Pipeline Flow */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-5 pt-4 border-t border-[#282826]">
+                <div className="p-3.5 rounded-2xl bg-[#222220] border border-[#333330] space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-[#DE7959]">Phase 1: First 2 Turns</span>
+                    <span className="text-[10px] bg-[#DE7959]/15 text-[#DE7959] px-2 py-0.5 rounded-full font-mono">
+                      Turns 1 - 2
+                    </span>
+                  </div>
+                  <div className="text-xs text-[#EDEDEB] font-medium">Anthropic Claude API</div>
+                  <p className="text-[11px] text-[#787875] leading-relaxed">
+                    Executed using your configured Claude API Key. Delivers genuine Anthropic reasoning and tone.
+                  </p>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-[#222220] border border-[#333330] space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-blue-400">Phase 2: Handover</span>
+                    <span className="text-[10px] bg-blue-500/15 text-blue-400 px-2 py-0.5 rounded-full font-mono">
+                      Turn 3+
+                    </span>
+                  </div>
+                  <div className="text-xs text-[#EDEDEB] font-medium">Gemini Engine with Full Context</div>
+                  <p className="text-[11px] text-[#787875] leading-relaxed">
+                    Gemini receives all previous Claude responses in its chat memory, continuing the work seamlessly without token burnout.
+                  </p>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-[#222220] border border-[#333330] space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-emerald-400">Phase 3: User View</span>
+                    <span className="text-[10px] bg-emerald-500/15 text-emerald-400 px-2 py-0.5 rounded-full font-mono">
+                      100% Stealth
+                    </span>
+                  </div>
+                  <div className="text-xs text-[#EDEDEB] font-medium">Unified Claude Interface</div>
+                  <p className="text-[11px] text-[#787875] leading-relaxed">
+                    No backend engine badges or indicators are ever displayed to the user. To the user, they are chatting with Claude.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Key Configuration Form Card */}
+            <div className="p-6 rounded-3xl bg-[#171716] border border-[#272725] shadow-lg space-y-5">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-[#DE7959]/15 text-[#DE7959] flex items-center justify-center">
+                    <KeyRound className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-[#EDEDEB]">
+                      Anthropic Claude API Credentials
+                    </h3>
+                    <p className="text-xs text-[#8E8E8B]">
+                      Saves securely to Cloud Firestore and activates the first 2 messages handover.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Status Indicator */}
+                <div className="flex items-center gap-2">
+                  {isClaudeKeyActive ? (
+                    <span className="text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-3 py-1 rounded-full font-medium flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                      Claude API Active
+                    </span>
+                  ) : (
+                    <span className="text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20 px-3 py-1 rounded-full font-medium flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-amber-400" />
+                      Key Not Configured
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <form onSubmit={handleSaveClaudeSettings} className="space-y-4 pt-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Claude API Key Input */}
+                  <div className="md:col-span-2">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs text-[#A0A09D] font-medium">
+                        Anthropic Claude API Key (<code className="text-[#DE7959]">sk-ant-api...</code>)
+                      </label>
+                      <span className="text-[11px] text-[#787875]">
+                        Get your key from{' '}
+                        <a
+                          href="https://console.anthropic.com/settings/keys"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[#DE7959] hover:underline"
+                        >
+                          console.anthropic.com
+                        </a>
+                      </span>
+                    </div>
+
+                    <div className="relative">
+                      <input
+                        type={showClaudeKey ? 'text' : 'password'}
+                        value={claudeKeyInput}
+                        onChange={e => {
+                          setClaudeKeyInput(e.target.value);
+                          setClaudeTestResult(null);
+                        }}
+                        placeholder="sk-ant-api03-..."
+                        className="w-full pl-4 pr-24 py-2.5 rounded-xl bg-[#1F1F1E] border border-[#333330] text-[#EDEDEB] placeholder-[#6E6E6B] text-xs font-mono focus:outline-none focus:border-[#DE7959] transition"
+                      />
+                      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setShowClaudeKey(!showClaudeKey)}
+                          className="p-1 rounded-lg text-[#8E8E8B] hover:text-white hover:bg-[#282826] transition cursor-pointer"
+                          title={showClaudeKey ? 'Hide key' : 'Show key'}
+                        >
+                          {showClaudeKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                        {claudeKeyInput && (
+                          <button
+                            type="button"
+                            onClick={() => setClaudeKeyInput('')}
+                            className="px-2 py-0.5 rounded text-[10px] text-[#8E8E8B] hover:text-rose-400 hover:bg-[#282826] transition"
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Claude Model Choice */}
+                  <div>
+                    <label className="block text-xs text-[#A0A09D] mb-1.5 font-medium">
+                      Anthropic Model for Initial Turns
+                    </label>
+                    <select
+                      value={claudeModelInput}
+                      onChange={e => setClaudeModelInput(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-[#1F1F1E] border border-[#333330] text-[#EDEDEB] text-xs focus:outline-none focus:border-[#DE7959] transition"
+                    >
+                      <option value="claude-3-5-sonnet-20241022">
+                        claude-3-5-sonnet-20241022 (Recommended Flagship)
+                      </option>
+                      <option value="claude-3-5-haiku-20241022">
+                        claude-3-5-haiku-20241022 (Fastest / Lightweight)
+                      </option>
+                      <option value="claude-3-opus-20240229">
+                        claude-3-opus-20240229 (Opus Deep Reasoning)
+                      </option>
+                    </select>
+                  </div>
+
+                  {/* Initial Messages Threshold */}
+                  <div>
+                    <label className="block text-xs text-[#A0A09D] mb-1.5 font-medium">
+                      Initial Messages Responded by Claude
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={1}
+                        max={10}
+                        value={claudeFirstCountInput}
+                        onChange={e => setClaudeFirstCountInput(Number(e.target.value))}
+                        className="w-24 px-3.5 py-2.5 rounded-xl bg-[#1F1F1E] border border-[#333330] text-[#EDEDEB] text-xs font-mono focus:outline-none focus:border-[#DE7959] transition text-center"
+                      />
+                      <span className="text-xs text-[#8E8E8B]">
+                        messages (Default: <b>2</b>). After this count, Gemini continues.
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Form Buttons */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-[#262624]">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleTestClaudeKey}
+                      disabled={testingClaudeKey || !claudeKeyInput.trim()}
+                      className="px-4 py-2.5 rounded-xl bg-[#242422] hover:bg-[#2F2F2C] text-[#C4C4C2] hover:text-white border border-[#383835] text-xs font-medium transition cursor-pointer flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {testingClaudeKey ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#DE7959]" />
+                          <span>Testing with Anthropic...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Zap className="w-3.5 h-3.5 text-[#DE7959]" />
+                          <span>Test Claude Connection</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="px-6 py-2.5 rounded-xl bg-[#DE7959] hover:bg-[#C9684A] text-white text-xs font-semibold transition cursor-pointer shadow-md shadow-[#DE7959]/20 self-end sm:self-auto"
+                  >
+                    Save & Sync Claude API Settings
+                  </button>
+                </div>
+
+                {/* Test Result Feedback */}
+                {claudeTestResult && (
+                  <div
+                    className={`p-3.5 rounded-2xl border text-xs flex items-start gap-2.5 ${
+                      claudeTestResult.success
+                        ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-400'
+                        : 'bg-rose-500/10 border-rose-500/25 text-rose-400'
+                    }`}
+                  >
+                    {claudeTestResult.success ? (
+                      <CheckCircle className="w-4 h-4 shrink-0 mt-0.5 text-emerald-400" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
+                    )}
+                    <span>{claudeTestResult.message}</span>
+                  </div>
+                )}
+
+                {/* Save Success Notice */}
+                {claudeSaveSuccess && (
+                  <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 text-xs flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>{claudeSaveSuccess}</span>
+                  </div>
+                )}
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* ================================================================= */}
+        {/* TAB 3: LIVE USERS MONITORING */}
         {/* ================================================================= */}
         {activeTab === 'live' && (
           <div className="space-y-6">
@@ -784,7 +1159,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         )}
 
         {/* ================================================================= */}
-        {/* TAB 3: LOGO & BRANDING SELECTION */}
+        {/* TAB 4: LOGO & BRANDING SELECTION */}
         {/* ================================================================= */}
         {activeTab === 'branding' && (
           <div className="space-y-6">
@@ -864,7 +1239,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         )}
 
         {/* ================================================================= */}
-        {/* TAB 4: VERCEL DEPLOYMENT & CLOUD SETTINGS */}
+        {/* TAB 5: VERCEL DEPLOYMENT & CLOUD SETTINGS */}
         {/* ================================================================= */}
         {activeTab === 'cloud' && (
           <div className="space-y-6">
@@ -878,10 +1253,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                   </span>
                 </div>
                 <h3 className="text-base font-semibold text-[#EDEDEB]">
-                  How to Make AI Chat and Database Work on Vercel
+                  How to Make AI Chat, Claude Handover, and Database Work on Vercel
                 </h3>
                 <p className="text-xs text-[#8E8E8B] mt-1 leading-relaxed">
-                  Your project has been upgraded with a Vercel Serverless Function (<code className="text-[#DE7959]">api/chat.ts</code>) and configured rewrites (<code className="text-[#DE7959]">vercel.json</code>). To enable AI streaming on Vercel, simply provide your free Gemini API Key in Vercel.
+                  Your project runs a Vercel Serverless Function (<code className="text-[#DE7959]">api/chat.ts</code>) with dual-engine handover support and rewrite routing (<code className="text-[#DE7959]">vercel.json</code>). Add your keys in Vercel to activate live chat worldwide.
                 </p>
               </div>
 
@@ -891,9 +1266,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                   <div className="w-7 h-7 rounded-lg bg-[#DE7959]/15 text-[#DE7959] font-bold text-xs flex items-center justify-center mb-2.5">
                     1
                   </div>
-                  <div className="text-xs font-semibold text-[#EDEDEB]">Get Free Gemini API Key</div>
+                  <div className="text-xs font-semibold text-[#EDEDEB]">Configure API Keys</div>
                   <p className="text-[11px] text-[#8E8E8B] mt-1 leading-relaxed">
-                    Open <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-[#DE7959] underline">aistudio.google.com/app/apikey</a> and create a free key in 1 click.
+                    Set your <b>GEMINI_API_KEY</b> and <b>ANTHROPIC_API_KEY</b> in Vercel environment variables or save Claude key directly in the <b>Claude API</b> tab above.
                   </p>
                 </div>
 
@@ -901,7 +1276,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                   <div className="w-7 h-7 rounded-lg bg-[#DE7959]/15 text-[#DE7959] font-bold text-xs flex items-center justify-center mb-2.5">
                     2
                   </div>
-                  <div className="text-xs font-semibold text-[#EDEDEB]">Add to Vercel Environment</div>
+                  <div className="text-xs font-semibold text-[#EDEDEB]">Add Variables in Vercel</div>
                   <p className="text-[11px] text-[#8E8E8B] mt-1 leading-relaxed">
                     Go to your Vercel Project &rarr; <b>Settings</b> &rarr; <b>Environment Variables</b> and add the variables listed below.
                   </p>
@@ -930,8 +1305,13 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                 <div className="space-y-2">
                   {[
                     {
+                      key: 'ANTHROPIC_API_KEY',
+                      desc: 'Official Claude API for first 2 messages of every chat',
+                      val: claudeSettings?.apiKey || 'sk-ant-api03-...',
+                    },
+                    {
                       key: 'GEMINI_API_KEY',
-                      desc: 'Powers live AI responses in api/chat.ts on Vercel',
+                      desc: 'Powers message 3+ handover responses seamlessly',
                       val: 'Paste your key from aistudio.google.com',
                       isKey: true,
                     },

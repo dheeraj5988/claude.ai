@@ -149,15 +149,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <span>Projects</span>
           </button>
 
-          {/* Artifacts (completely disabled non-working button) */}
+          {/* Artifacts */}
           <button
             type="button"
-            disabled
-            className="w-full flex items-center gap-3 px-2.5 py-2 rounded-xl text-[#6B6B68] opacity-60 cursor-default text-left select-none"
-            title="Artifacts (disabled)"
+            onClick={() => onShowToast?.('Artifacts is upcoming in this panel.')}
+            className="w-full flex items-center gap-3 px-2.5 py-2 rounded-xl hover:text-white hover:bg-[#222221] transition cursor-pointer text-left"
           >
             <svg
-              className="w-4 h-4 text-[#6B6B68] shrink-0"
+              className="w-4 h-4 text-[#9E9E9C] shrink-0"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -180,7 +179,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           {/* Customize */}
           <button
-            onClick={() => onShowToast?.('Custom instructions & persona is active in settings.')}
+            onClick={() => onShowToast?.('Customization is upcoming in this panel.')}
             className="w-full flex items-center gap-3 px-2.5 py-2 rounded-xl hover:text-white hover:bg-[#222221] transition cursor-pointer text-left"
           >
             <Briefcase className="w-4 h-4 text-[#9E9E9C] shrink-0" />

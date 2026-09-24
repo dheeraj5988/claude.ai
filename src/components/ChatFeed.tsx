@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Message, Artifact, ModelId } from '../types';
 import { MarkdownRenderer } from './MarkdownRenderer';
-import { ClaudeSunburst } from './ClaudeSunburst';
+import { CenterChatLogo } from './CenterChatLogo';
 import {
   FileCode,
   AlertCircle,
@@ -104,9 +104,12 @@ export const ChatFeed: React.FC<ChatFeedProps> = ({
               />
             )}
 
-            {/* Terracotta Claude Sunburst Asterisk under message matching Screenshot 7 & 8 */}
-            <div className="mt-3 select-none">
-              <ClaudeSunburst size={22} />
+            {/* Center Chat Logo exactly matching user screenshot */}
+            <div className="mt-3.5 select-none">
+              <CenterChatLogo
+                size={26}
+                className={message.status === 'streaming' && !message.content ? 'animate-pulse' : ''}
+              />
             </div>
           </div>
         );
