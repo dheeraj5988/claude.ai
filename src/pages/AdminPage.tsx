@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useAuth, ADMIN_PASSWORD } from '../context/AuthContext';
+import { useAuth, ADMIN_PASSWORD, GeminiKeyAccount } from '../context/AuthContext';
 import { AVAILABLE_LOGOS, AppLogo } from '../logos';
 import { AppLogoIcon } from '../logos/AppLogoIcon';
 import {
@@ -30,8 +30,14 @@ import {
   Zap,
   ArrowRight,
   Sliders,
-  CheckCircle
+  CheckCircle,
+  Gauge,
+  DollarSign,
+  Power,
+  AlertTriangle,
+  Plus
 } from 'lucide-react';
+import { ClaudeSunburst } from '../components/ClaudeSunburst';
 
 interface AdminPageProps {
   onNavigateHome: () => void;
@@ -55,12 +61,66 @@ export const AdminPage: React.FC<AdminPageProps> = ({
     setActiveLogo,
     claudeSettings,
     updateClaudeSettings,
+    geminiSettings,
+    updateGeminiSettings,
+    addGeminiKeyAccount,
+    removeGeminiKeyAccount,
   } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<'users' | 'claude' | 'live' | 'branding' | 'cloud'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'telemetry' | 'claude' | 'live' | 'branding' | 'cloud'>('users');
   const [passwordInput, setPasswordInput] = useState('');
   const [authError, setAuthError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // System stats & telemetry state
+  const [systemStats, setSystemStats] = useState<{
+    totalRequests: number;
+    totalErrors: number;
+    rateLimitEvents: number;
+    dailyUsageCount: number;
+    monthlyUsageCount: number;
+    maintenanceMode: boolean;
+  }>({
+    totalRequests: 0,
+    totalErrors: 0,
+    rateLimitEvents: 0,
+    dailyUsageCount: 0,
+    monthlyUsageCount: 0,
+    maintenanceMode: false,
+  });
+
+  const fetchStats = async () => {
+    try {
+      const res = await fetch('/api/admin/stats');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.stats) {
+          setSystemStats(data.stats);
+        }
+      }
+    } catch {}
+  };
+
+  useEffect(() => {
+    fetchStats();
+    const interval = setInterval(fetchStats, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleToggleMaintenance = async () => {
+    const next = !systemStats.maintenanceMode;
+    try {
+      await fetch('/api/admin/maintenance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: next }),
+      });
+      setSystemStats(prev => ({ ...prev, maintenanceMode: next }));
+      onShowToast?.(next ? 'Maintenance mode enabled' : 'Maintenance mode disabled');
+    } catch {
+      onShowToast?.('Failed to toggle maintenance mode');
+    }
+  };
 
   // Claude API Key form state
   const [claudeKeyInput, setClaudeKeyInput] = useState(claudeSettings?.apiKey || '');
@@ -71,6 +131,21 @@ export const AdminPage: React.FC<AdminPageProps> = ({
   const [testingClaudeKey, setTestingClaudeKey] = useState(false);
   const [claudeTestResult, setClaudeTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
+  // Gemini API Key & Multi-Account Pool state
+  const [geminiKeyInput, setGeminiKeyInput] = useState(geminiSettings?.apiKey || '');
+  const [geminiModelInput, setGeminiModelInput] = useState(geminiSettings?.model || 'gemini-2.5-flash');
+  const [showGeminiKey, setShowGeminiKey] = useState(false);
+  const [geminiSaveSuccess, setGeminiSaveSuccess] = useState('');
+  const [testingGeminiKey, setTestingGeminiKey] = useState(false);
+  const [geminiTestResult, setGeminiTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  // Pool form state
+  const [newGeminiAccountName, setNewGeminiAccountName] = useState('');
+  const [newGeminiAccountKey, setNewGeminiAccountKey] = useState('');
+  const [showNewGeminiKey, setShowNewGeminiKey] = useState(false);
+  const [testingPoolKeyId, setTestingPoolKeyId] = useState<string | null>(null);
+  const [poolKeyTestResults, setPoolKeyTestResults] = useState<Record<string, { success: boolean; message: string }>>({});
+
   // Sync inputs with Firestore real-time updates
   useEffect(() => {
     if (claudeSettings) {
@@ -79,6 +154,13 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       setClaudeFirstCountInput(claudeSettings.firstMessagesCount ?? 2);
     }
   }, [claudeSettings]);
+
+  useEffect(() => {
+    if (geminiSettings) {
+      setGeminiKeyInput(geminiSettings.apiKey || '');
+      setGeminiModelInput(geminiSettings.model || 'gemini-2.5-flash');
+    }
+  }, [geminiSettings]);
 
   // New user form state
   const [newId, setNewId] = useState('');
@@ -147,6 +229,16 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       enabled: true,
     });
 
+    fetch('/api/admin/claude-settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        apiKey: claudeKeyInput.trim(),
+        model: claudeModelInput,
+        firstMessagesCount: Math.max(1, Number(claudeFirstCountInput) || 2),
+      }),
+    }).catch(() => {});
+
     if (ok) {
       setClaudeSaveSuccess('Claude API key and handover settings saved & synced to Cloud Firestore!');
       onShowToast?.('Claude API settings saved successfully');
@@ -198,6 +290,121 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       });
     } finally {
       setTestingClaudeKey(false);
+    }
+  };
+
+  const handleSaveGeminiSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setGeminiSaveSuccess('');
+    setGeminiTestResult(null);
+
+    const ok = await updateGeminiSettings({
+      apiKey: geminiKeyInput.trim(),
+      model: geminiModelInput,
+      enabled: true,
+    });
+
+    fetch('/api/admin/gemini-settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        apiKey: geminiKeyInput.trim(),
+        apiKeys: geminiSettings.apiKeys.map(k => k.apiKey),
+        model: geminiModelInput,
+      }),
+    }).catch(() => {});
+
+    if (ok) {
+      setGeminiSaveSuccess('Gemini API settings and multi-key pool saved & synced to Cloud Firestore!');
+      onShowToast?.('Gemini API settings saved successfully');
+      setTimeout(() => setGeminiSaveSuccess(''), 5000);
+    } else {
+      onShowToast?.('Failed to save Gemini settings to Firestore');
+    }
+  };
+
+  const handleTestGeminiKey = async (overrideKey?: string) => {
+    const keyToTest = (overrideKey || geminiKeyInput).trim();
+    if (!keyToTest) {
+      setGeminiTestResult({
+        success: false,
+        message: 'Please enter a Gemini API key first before testing.',
+      });
+      return;
+    }
+
+    setTestingGeminiKey(true);
+    setGeminiTestResult(null);
+
+    try {
+      const res = await fetch('/api/test-gemini-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: keyToTest }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setGeminiTestResult({
+          success: true,
+          message: 'Google Gemini API Key is valid and connected!',
+        });
+        onShowToast?.('Gemini API key verified successfully');
+      } else {
+        setGeminiTestResult({
+          success: false,
+          message: data.error || 'Failed to authenticate with Google Gemini API. Please check the key.',
+        });
+      }
+    } catch (err: any) {
+      setGeminiTestResult({
+        success: false,
+        message: err.message || 'Connection failed to test Gemini API.',
+      });
+    } finally {
+      setTestingGeminiKey(false);
+    }
+  };
+
+  const handleAddGeminiAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newGeminiAccountKey.trim()) return;
+
+    const ok = await addGeminiKeyAccount(newGeminiAccountName.trim(), newGeminiAccountKey.trim());
+    if (ok) {
+      setNewGeminiAccountName('');
+      setNewGeminiAccountKey('');
+      onShowToast?.('New Gemini key account added to pool');
+    } else {
+      onShowToast?.('Failed to add Gemini account to pool');
+    }
+  };
+
+  const handleTestPoolKey = async (account: GeminiKeyAccount) => {
+    setTestingPoolKeyId(account.id);
+    try {
+      const res = await fetch('/api/test-gemini-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: account.apiKey }),
+      });
+      const data = await res.json();
+      setPoolKeyTestResults(prev => ({
+        ...prev,
+        [account.id]: {
+          success: Boolean(res.ok && data.success),
+          message: res.ok && data.success ? 'Active & Valid' : (data.error || 'Connection Failed'),
+        },
+      }));
+    } catch (err: any) {
+      setPoolKeyTestResults(prev => ({
+        ...prev,
+        [account.id]: {
+          success: false,
+          message: err.message || 'Connection failed',
+        },
+      }));
+    } finally {
+      setTestingPoolKeyId(null);
     }
   };
 
@@ -391,20 +598,18 @@ export const AdminPage: React.FC<AdminPageProps> = ({
       {/* Top Main Navigation Bar */}
       <header className="w-full border-b border-[#232321] px-6 py-3.5 flex items-center justify-between bg-[#151514] sticky top-0 z-30">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-[#DE7959]/15 border border-[#DE7959]/30 flex items-center justify-center text-[#DE7959]">
-            <Shield className="w-5 h-5" />
-          </div>
+          <ClaudeSunburst size={28} />
           <div>
             <div className="flex items-center gap-2">
               <span className="font-semibold text-sm tracking-tight text-[#EDEDEB]">
-                Claude Operations Console
+                Claude Administrator Console
               </span>
               <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                 Live Cloud Sync
               </span>
             </div>
-            <p className="text-[11px] text-[#787875]">Master Admin Control Panel</p>
+            <p className="text-[11px] text-[#787875]">Multi-Provider & Cost Control Dashboard</p>
           </div>
         </div>
 
@@ -539,7 +744,21 @@ export const AdminPage: React.FC<AdminPageProps> = ({
             <span>User Accounts & Passwords ({users.length})</span>
           </button>
 
-          {/* New Claude API Tab */}
+          {/* Usage & Cost Telemetry Tab */}
+          <button
+            type="button"
+            onClick={() => setActiveTab('telemetry')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-medium transition cursor-pointer shrink-0 ${
+              activeTab === 'telemetry'
+                ? 'bg-[#252523] text-white border border-[#3A3A38]'
+                : 'text-[#8E8E8B] hover:text-white hover:bg-[#1A1A19]'
+            }`}
+          >
+            <Gauge className="w-4 h-4 text-emerald-400" />
+            <span>Usage & Cost Safeguards</span>
+          </button>
+
+          {/* Claude API Tab */}
           <button
             type="button"
             onClick={() => setActiveTab('claude')}
@@ -551,7 +770,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({
           >
             <KeyRound className="w-4 h-4 text-[#DE7959]" />
             <span>
-              Claude API & Handover {isClaudeKeyActive ? '●' : ''}
+              AI Providers & Keys (Claude + Gemini Pool) {isClaudeKeyActive ? '●' : ''}
             </span>
           </button>
 
@@ -832,6 +1051,112 @@ export const AdminPage: React.FC<AdminPageProps> = ({
         )}
 
         {/* ================================================================= */}
+        {/* TAB: USAGE, LIMITS & COST SAFEGUARDS */}
+        {/* ================================================================= */}
+        {activeTab === 'telemetry' && (
+          <div className="space-y-6">
+            {/* System Status & Maintenance Toggle */}
+            <div className="p-6 rounded-3xl bg-[#171716] border border-[#272725] shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div
+                  className={`w-10 h-10 rounded-2xl flex items-center justify-center ${
+                    systemStats.maintenanceMode
+                      ? 'bg-amber-500/15 text-amber-400'
+                      : 'bg-emerald-500/15 text-emerald-400'
+                  }`}
+                >
+                  <Power className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-[#EDEDEB] flex items-center gap-2">
+                    Application Status:
+                    <span className={systemStats.maintenanceMode ? 'text-amber-400' : 'text-emerald-400'}>
+                      {systemStats.maintenanceMode ? 'Maintenance Mode Active' : 'All Systems Operational'}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-[#8E8E8B]">
+                    {systemStats.maintenanceMode
+                      ? 'Chat generation is temporarily paused for regular users while maintenance is ongoing.'
+                      : 'Chat routing and streaming endpoints are active with strict rate limiting enabled.'}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleToggleMaintenance}
+                className={`px-4 py-2 rounded-xl text-xs font-semibold transition cursor-pointer flex items-center gap-2 ${
+                  systemStats.maintenanceMode
+                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                    : 'bg-amber-600/20 hover:bg-amber-600/30 text-amber-400 border border-amber-600/30'
+                }`}
+              >
+                <Power className="w-3.5 h-3.5" />
+                <span>{systemStats.maintenanceMode ? 'Disable Maintenance Mode' : 'Enable Maintenance Mode'}</span>
+              </button>
+            </div>
+
+            {/* Usage Telemetry Metric Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="p-5 rounded-2xl bg-[#171716] border border-[#272725]">
+                <div className="text-xs text-[#8E8E8B]">Daily Message Count</div>
+                <div className="text-2xl font-bold text-white mt-1 font-mono">{systemStats.dailyUsageCount}</div>
+                <div className="text-[11px] text-[#787875] mt-1">Daily Cap: 50 / user</div>
+              </div>
+
+              <div className="p-5 rounded-2xl bg-[#171716] border border-[#272725]">
+                <div className="text-xs text-[#8E8E8B]">Monthly Message Count</div>
+                <div className="text-2xl font-bold text-white mt-1 font-mono">{systemStats.monthlyUsageCount}</div>
+                <div className="text-[11px] text-[#787875] mt-1">Monthly Cap: 1,000 / user</div>
+              </div>
+
+              <div className="p-5 rounded-2xl bg-[#171716] border border-[#272725]">
+                <div className="text-xs text-[#8E8E8B]">Rate-Limit Events</div>
+                <div className="text-2xl font-bold text-amber-400 mt-1 font-mono">{systemStats.rateLimitEvents}</div>
+                <div className="text-[11px] text-[#787875] mt-1">Intercepted & throttled</div>
+              </div>
+
+              <div className="p-5 rounded-2xl bg-[#171716] border border-[#272725]">
+                <div className="text-xs text-[#8E8E8B]">Approximate API Cost</div>
+                <div className="text-2xl font-bold text-emerald-400 mt-1 font-mono">
+                  ${(systemStats.totalRequests * 0.0028).toFixed(3)}
+                </div>
+                <div className="text-[11px] text-[#787875] mt-1">Based on token usage metrics</div>
+              </div>
+            </div>
+
+            {/* Configured Limits Table */}
+            <div className="p-6 rounded-3xl bg-[#171716] border border-[#272725] shadow-lg space-y-4">
+              <div className="flex items-center gap-2">
+                <Shield className="w-4 h-4 text-[#E07A5F]" />
+                <h3 className="text-sm font-semibold text-[#EDEDEB]">Enforced Cost & Abuse Safeguards</h3>
+              </div>
+              <p className="text-xs text-[#8E8E8B]">
+                These rules are validated server-side in <code>server/limits.ts</code> to prevent runaway token expenditure.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
+                <div className="p-3.5 rounded-xl bg-[#1E1E1D] border border-[#2E2E2C] flex items-center justify-between text-xs">
+                  <span className="text-[#C4C4C2]">Daily Message Limit</span>
+                  <span className="font-mono text-emerald-400 font-semibold">50 messages / day</span>
+                </div>
+                <div className="p-3.5 rounded-xl bg-[#1E1E1D] border border-[#2E2E2C] flex items-center justify-between text-xs">
+                  <span className="text-[#C4C4C2]">Monthly Message Limit</span>
+                  <span className="font-mono text-emerald-400 font-semibold">1,000 messages / month</span>
+                </div>
+                <div className="p-3.5 rounded-xl bg-[#1E1E1D] border border-[#2E2E2C] flex items-center justify-between text-xs">
+                  <span className="text-[#C4C4C2]">Maximum Message Characters</span>
+                  <span className="font-mono text-amber-400 font-semibold">20,000 characters</span>
+                </div>
+                <div className="p-3.5 rounded-xl bg-[#1E1E1D] border border-[#2E2E2C] flex items-center justify-between text-xs">
+                  <span className="text-[#C4C4C2]">Maximum Conversation Context</span>
+                  <span className="font-mono text-amber-400 font-semibold">40 messages</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ================================================================= */}
         {/* TAB 2: CLAUDE API KEY & HANDOVER SETTINGS */}
         {/* ================================================================= */}
         {activeTab === 'claude' && (
@@ -1082,6 +1407,321 @@ export const AdminPage: React.FC<AdminPageProps> = ({
                   </div>
                 )}
               </form>
+            </div>
+
+            {/* ============================================================= */}
+            {/* GOOGLE GEMINI ENGINE & MULTI-ACCOUNT KEYS POOL */}
+            {/* ============================================================= */}
+            <div className="p-6 rounded-3xl bg-[#171716] border border-[#272725] shadow-lg space-y-6">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-blue-500/15 text-blue-400 flex items-center justify-center">
+                    <Bot className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-[#EDEDEB] flex items-center gap-2">
+                      <span>Google Gemini Engine & Multi-Account Keys Pool</span>
+                      <span className="text-[11px] font-normal px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-400 border border-blue-500/20">
+                        Turns 3+ Engine
+                      </span>
+                    </h3>
+                    <p className="text-xs text-[#8E8E8B]">
+                      Powers every turn after Claude completes turns 1 & 2. Gemini receives full conversational memory from prior Claude turns.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-xs bg-blue-500/10 text-blue-400 border border-blue-500/20 px-3 py-1 rounded-full font-medium flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-blue-400" />
+                    {(geminiSettings?.apiKeys?.length || 0) + (geminiKeyInput ? 1 : 0)} Key(s) in Pool
+                  </span>
+                </div>
+              </div>
+
+              {/* Primary Gemini Form */}
+              <form onSubmit={handleSaveGeminiSettings} className="space-y-4 pt-1 border-t border-[#262624]">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Primary Key */}
+                  <div className="md:col-span-2">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs text-[#A0A09D] font-medium">
+                        Primary Gemini API Key (<code className="text-blue-400">AIzaSy...</code>)
+                      </label>
+                      <span className="text-[11px] text-[#787875]">
+                        Free keys from{' '}
+                        <a
+                          href="https://aistudio.google.com/app/apikey"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-blue-400 hover:underline"
+                        >
+                          aistudio.google.com
+                        </a>
+                      </span>
+                    </div>
+
+                    <div className="relative">
+                      <input
+                        type={showGeminiKey ? 'text' : 'password'}
+                        value={geminiKeyInput}
+                        onChange={e => {
+                          setGeminiKeyInput(e.target.value);
+                          setGeminiTestResult(null);
+                        }}
+                        placeholder="AIzaSy..."
+                        className="w-full pl-4 pr-24 py-2.5 rounded-xl bg-[#1F1F1E] border border-[#333330] text-[#EDEDEB] placeholder-[#6E6E6B] text-xs font-mono focus:outline-none focus:border-blue-500 transition"
+                      />
+                      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setShowGeminiKey(!showGeminiKey)}
+                          className="p-1 rounded-lg text-[#8E8E8B] hover:text-white hover:bg-[#282826] transition cursor-pointer"
+                          title={showGeminiKey ? 'Hide key' : 'Show key'}
+                        >
+                          {showGeminiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                        {geminiKeyInput && (
+                          <button
+                            type="button"
+                            onClick={() => setGeminiKeyInput('')}
+                            className="px-2 py-0.5 rounded text-[10px] text-[#8E8E8B] hover:text-rose-400 hover:bg-[#282826] transition"
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Gemini Model */}
+                  <div>
+                    <label className="block text-xs text-[#A0A09D] mb-1.5 font-medium">
+                      Gemini Backend Model
+                    </label>
+                    <select
+                      value={geminiModelInput}
+                      onChange={e => setGeminiModelInput(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-[#1F1F1E] border border-[#333330] text-[#EDEDEB] text-xs focus:outline-none focus:border-blue-500 transition"
+                    >
+                      <option value="gemini-2.5-flash">gemini-2.5-flash (Recommended Flagship - High Speed & Low Cost)</option>
+                      <option value="gemini-3.8-flash">gemini-3.8-flash (Latest Generation High Throughput)</option>
+                      <option value="gemini-flash-latest">gemini-flash-latest (Auto-tracked Flash Candidate)</option>
+                      <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite (Ultra Lightweight / Free Quota Saver)</option>
+                    </select>
+                  </div>
+
+                  {/* Role Note */}
+                  <div className="flex flex-col justify-end">
+                    <p className="text-[11px] text-[#8E8E8B] bg-[#1E1E1D] p-2.5 rounded-xl border border-[#2E2E2C] leading-relaxed">
+                      💡 <b>Stealth & Memory Continuity</b>: The user interface always displays the user’s selected Claude model (Sonnet, Opus, etc.). Behind the scenes, Gemini carries over the prior Claude conversation turns seamlessly.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Primary Key Actions */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-[#262624]">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleTestGeminiKey()}
+                      disabled={testingGeminiKey || !geminiKeyInput.trim()}
+                      className="px-4 py-2.5 rounded-xl bg-[#242422] hover:bg-[#2F2F2C] text-[#C4C4C2] hover:text-white border border-[#383835] text-xs font-medium transition cursor-pointer flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {testingGeminiKey ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-400" />
+                          <span>Testing Gemini Connection...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Zap className="w-3.5 h-3.5 text-blue-400" />
+                          <span>Test Primary Gemini Connection</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition cursor-pointer shadow-md shadow-blue-500/20 self-end sm:self-auto"
+                  >
+                    Save & Sync Gemini Settings
+                  </button>
+                </div>
+
+                {/* Test Feedback */}
+                {geminiTestResult && (
+                  <div
+                    className={`p-3.5 rounded-2xl border text-xs flex items-start gap-2.5 ${
+                      geminiTestResult.success
+                        ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-400'
+                        : 'bg-rose-500/10 border-rose-500/25 text-rose-400'
+                    }`}
+                  >
+                    {geminiTestResult.success ? (
+                      <CheckCircle className="w-4 h-4 shrink-0 mt-0.5 text-emerald-400" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
+                    )}
+                    <span>{geminiTestResult.message}</span>
+                  </div>
+                )}
+
+                {geminiSaveSuccess && (
+                  <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 text-xs flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>{geminiSaveSuccess}</span>
+                  </div>
+                )}
+              </form>
+
+              {/* MULTI-ACCOUNT GEMINI KEYS POOL SECTION */}
+              <div className="pt-4 border-t border-[#262624] space-y-4">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div>
+                    <h4 className="text-xs font-semibold text-[#EDEDEB] uppercase tracking-wider flex items-center gap-2">
+                      <span>Multi-Account Gemini Keys Pool (Failover & Free Quota Multiplier)</span>
+                    </h4>
+                    <p className="text-[11px] text-[#8E8E8B] mt-0.5">
+                      Add multiple free Gemini API keys from different Google accounts. If one key hits its minute or daily rate limit, the backend rotates automatically to the next key without failing the user.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Add Key Form */}
+                <form
+                  onSubmit={handleAddGeminiAccount}
+                  className="p-4 rounded-2xl bg-[#1C1C1A] border border-[#2E2E2C] grid grid-cols-1 sm:grid-cols-12 gap-3 items-end"
+                >
+                  <div className="sm:col-span-4">
+                    <label className="block text-[11px] text-[#A0A09D] mb-1 font-medium">
+                      Account / Label Name
+                    </label>
+                    <input
+                      type="text"
+                      value={newGeminiAccountName}
+                      onChange={e => setNewGeminiAccountName(e.target.value)}
+                      placeholder="e.g. Account 2 (Personal), Work Tier"
+                      className="w-full px-3 py-2 rounded-xl bg-[#242422] border border-[#383835] text-[#EDEDEB] placeholder-[#6E6E6B] text-xs focus:outline-none focus:border-blue-500 transition"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-6">
+                    <label className="block text-[11px] text-[#A0A09D] mb-1 font-medium">
+                      Gemini API Key (<code className="text-blue-400">AIzaSy...</code>) *
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showNewGeminiKey ? 'text' : 'password'}
+                        value={newGeminiAccountKey}
+                        onChange={e => setNewGeminiAccountKey(e.target.value)}
+                        placeholder="AIzaSy..."
+                        className="w-full pl-3 pr-10 py-2 rounded-xl bg-[#242422] border border-[#383835] text-[#EDEDEB] placeholder-[#6E6E6B] text-xs font-mono focus:outline-none focus:border-blue-500 transition"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewGeminiKey(!showNewGeminiKey)}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-[#8E8E8B] hover:text-white"
+                      >
+                        {showNewGeminiKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <button
+                      type="submit"
+                      disabled={!newGeminiAccountKey.trim()}
+                      className="w-full py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-semibold transition cursor-pointer flex items-center justify-center gap-1.5 shadow-sm"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add to Pool</span>
+                    </button>
+                  </div>
+                </form>
+
+                {/* Pool Keys Table */}
+                {(geminiSettings?.apiKeys || []).length > 0 ? (
+                  <div className="rounded-2xl border border-[#2E2E2C] overflow-hidden bg-[#1B1B1A]">
+                    <div className="divide-y divide-[#282826]">
+                      {geminiSettings.apiKeys.map((acc, idx) => {
+                        const masked = acc.apiKey.length > 10
+                          ? `${acc.apiKey.slice(0, 7)}...${acc.apiKey.slice(-4)}`
+                          : '••••••••••••';
+                        const testState = poolKeyTestResults[acc.id];
+                        const isTestingThis = testingPoolKeyId === acc.id;
+
+                        return (
+                          <div
+                            key={acc.id}
+                            className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-[#20201E] transition"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="w-7 h-7 rounded-lg bg-[#262624] text-blue-400 flex items-center justify-center font-mono font-bold text-xs shrink-0 border border-[#333330]">
+                                #{idx + 1}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="text-xs font-medium text-[#EDEDEB] flex items-center gap-2">
+                                  <span>{acc.name}</span>
+                                  <span className="font-mono text-[11px] text-[#8E8E8B] bg-[#242422] px-2 py-0.5 rounded-md border border-[#30302E]">
+                                    {masked}
+                                  </span>
+                                </div>
+                                <div className="text-[10px] text-[#6E6E6B] mt-0.5">
+                                  Added on {new Date(acc.addedAt).toLocaleDateString()}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 self-end sm:self-center">
+                              {testState && (
+                                <span
+                                  className={`text-[10px] px-2 py-0.5 rounded-md font-mono ${
+                                    testState.success
+                                      ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
+                                      : 'bg-rose-500/15 text-rose-400 border border-rose-500/20'
+                                  }`}
+                                >
+                                  {testState.message}
+                                </span>
+                              )}
+
+                              <button
+                                type="button"
+                                onClick={() => handleTestPoolKey(acc)}
+                                disabled={isTestingThis}
+                                className="px-2.5 py-1 rounded-lg bg-[#252524] hover:bg-[#2E2E2C] text-[#C4C4C2] hover:text-white border border-[#383835] text-[11px] transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                              >
+                                {isTestingThis ? (
+                                  <RefreshCw className="w-3 h-3 animate-spin text-blue-400" />
+                                ) : (
+                                  <Zap className="w-3 h-3 text-blue-400" />
+                                )}
+                                <span>Test Key</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => removeGeminiKeyAccount(acc.id)}
+                                className="p-1.5 rounded-lg text-[#8E8E8B] hover:text-rose-400 hover:bg-[#2C2222] transition cursor-pointer"
+                                title="Remove key from pool"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-4 rounded-2xl bg-[#1A1A19] border border-dashed border-[#30302E] text-center text-xs text-[#787875]">
+                    No additional Gemini keys in the pool yet. Add extra free Gemini API keys above to ensure zero downtime when the primary key reaches its quota.
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}

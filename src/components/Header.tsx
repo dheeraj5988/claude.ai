@@ -116,9 +116,9 @@ export const Header: React.FC<HeaderProps> = ({
         </button>
 
         <div className="flex items-center gap-2">
-          <ClaudeSunburst size={22} />
-          <span className="font-serif font-normal text-[#EDEDEB] text-base">
-            Moonlit chat?
+          <ClaudeSunburst size={20} />
+          <span className="font-serif font-medium text-[#EDEDEB] text-base tracking-tight">
+            Claude
           </span>
         </div>
 

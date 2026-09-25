@@ -5,6 +5,21 @@
     --claude-accent: #d97706;
     --claude-accent-hover: #b45309;
     --claude-terracotta: #da7756;
+    --claude-bg: #fbfbfa;
+    --claude-sidebar: #f5f4f0;
+    --claude-surface: #ffffff;
+    --claude-border: #e8e6df;
+    --claude-text: #1f1f1e;
+    --claude-text-muted: #73726d;
+  }
+
+  .dark {
+    --claude-bg: #1c1c1a;
+    --claude-sidebar: #171716;
+    --claude-surface: #222221;
+    --claude-border: #2d2d2b;
+    --claude-text: #ededeb;
+    --claude-text-muted: #8e8e8b;
   }
 
   body {

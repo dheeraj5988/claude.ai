@@ -47,6 +47,7 @@ export interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  provider?: 'anthropic' | 'gemini' | 'claude';
   rawContent?: string;
   thought?: string;
   thoughtDurationSeconds?: number;
@@ -62,11 +63,15 @@ export interface Message {
 
 export interface ChatSession {
   id: string;
+  userId?: string;
   title: string;
   createdAt: number;
   updatedAt: number;
+  userMessageCount: number;
   messages: Message[];
   isPinned?: boolean;
+  archived?: boolean;
+  deleted?: boolean;
   model: ModelId;
   effort: EffortLevel;
   thinkingEnabled: boolean;

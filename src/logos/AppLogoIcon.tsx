@@ -1,6 +1,6 @@
 import React from 'react';
 import { AppLogo } from './index';
-import { ClaudeSunburst } from '../components/ClaudeSunburst';
+import { AuraLogo } from '../components/AuraLogo';
 
 interface AppLogoIconProps {
   logo?: AppLogo | null;
@@ -14,7 +14,7 @@ export const AppLogoIcon: React.FC<AppLogoIconProps> = ({
   className = '',
 }) => {
   if (!logo || logo.type === 'svg-sunburst') {
-    return <ClaudeSunburst size={size} color={logo?.color || '#DE7959'} className={className} />;
+    return <AuraLogo size={size} color={logo?.color || '#E07A5F'} className={className} />;
   }
 
   if (logo.type === 'custom-image' && logo.customDataUrl) {

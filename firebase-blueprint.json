@@ -1,50 +1,151 @@
 {
   "entities": {
-    "UserAccount": {
-      "title": "UserAccount",
-      "description": "User account credentials and profile managed by admin",
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile, role, status, and usage counters",
       "type": "object",
       "properties": {
         "id": {
           "type": "string",
-          "description": "Unique username or account ID"
-        },
-        "name": {
-          "type": "string",
-          "description": "User display name"
+          "description": "Unique user ID"
         },
         "email": {
           "type": "string",
           "description": "User email address"
         },
+        "displayName": {
+          "type": "string",
+          "description": "User display name"
+        },
+        "photoURL": {
+          "type": "string",
+          "description": "Avatar photo URL"
+        },
         "password": {
           "type": "string",
-          "description": "Password set by admin"
+          "description": "User account password"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["user", "admin"],
+          "description": "User authorization role"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "disabled"],
+          "description": "Account status"
         },
         "plan": {
           "type": "string",
-          "enum": ["Pro", "Free", "Max"],
-          "description": "Account subscription plan"
+          "enum": ["Free", "Pro", "Max"],
+          "description": "Subscription tier"
+        },
+        "dailyMessageCount": {
+          "type": "number",
+          "description": "Messages sent today"
+        },
+        "monthlyMessageCount": {
+          "type": "number",
+          "description": "Messages sent this month"
         },
         "createdAt": {
           "type": "number",
-          "description": "Timestamp when account was created"
+          "description": "Account creation timestamp"
         },
-        "lastActiveAt": {
+        "lastSeenAt": {
           "type": "number",
-          "description": "Timestamp of latest activity"
+          "description": "Latest activity timestamp"
         }
       },
-      "required": ["id", "password"]
+      "required": ["id", "role", "status"]
+    },
+    "Conversation": {
+      "title": "Conversation",
+      "description": "User conversation thread with user message counter",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Conversation ID"
+        },
+        "title": {
+          "type": "string",
+          "description": "Conversation title"
+        },
+        "userMessageCount": {
+          "type": "number",
+          "description": "Total user messages sent in conversation"
+        },
+        "lastMessagePreview": {
+          "type": "string",
+          "description": "Snippet of last message"
+        },
+        "archived": {
+          "type": "boolean",
+          "description": "Whether conversation is archived"
+        },
+        "deleted": {
+          "type": "boolean",
+          "description": "Soft deletion flag"
+        },
+        "createdAt": {
+          "type": "number",
+          "description": "Creation timestamp"
+        },
+        "updatedAt": {
+          "type": "number",
+          "description": "Last update timestamp"
+        }
+      },
+      "required": ["id", "title", "userMessageCount"]
+    },
+    "MessageRecord": {
+      "title": "MessageRecord",
+      "description": "Individual message in a conversation",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Message unique ID"
+        },
+        "role": {
+          "type": "string",
+          "enum": ["user", "assistant"],
+          "description": "Message role"
+        },
+        "content": {
+          "type": "string",
+          "description": "Text content of message"
+        },
+        "provider": {
+          "type": "string",
+          "enum": ["claude", "gemini"],
+          "description": "AI provider used"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["streaming", "completed", "error"],
+          "description": "Generation status"
+        },
+        "createdAt": {
+          "type": "number",
+          "description": "Timestamp"
+        }
+      },
+      "required": ["id", "role", "content"]
     },
     "AppSettings": {
       "title": "AppSettings",
-      "description": "Global application branding and configuration",
+      "description": "Global application configuration",
       "type": "object",
       "properties": {
         "activeLogo": {
           "type": "object",
-          "description": "The selected active logo configuration"
+          "description": "Active brand logo"
+        },
+        "maintenanceMode": {
+          "type": "boolean",
+          "description": "Maintenance mode status"
         },
         "updatedAt": {
           "type": "number",
@@ -54,24 +155,16 @@
     },
     "LiveSession": {
       "title": "LiveSession",
-      "description": "Tracks active online user sessions",
+      "description": "Online presence tracking",
       "type": "object",
       "properties": {
         "userId": {
           "type": "string",
-          "description": "Active user ID"
+          "description": "User ID"
         },
         "userName": {
           "type": "string",
-          "description": "Active user display name"
-        },
-        "userEmail": {
-          "type": "string",
-          "description": "Active user email"
-        },
-        "plan": {
-          "type": "string",
-          "description": "Active user plan"
+          "description": "Display name"
         },
         "lastActiveAt": {
           "type": "number",
@@ -84,21 +177,33 @@
   "firestore": {
     "/users/{userId}": {
       "schema": {
-        "$ref": "#/entities/UserAccount"
+        "$ref": "#/entities/UserProfile"
       },
-      "description": "Stores user accounts and credentials set by admin"
+      "description": "Stores registered user profiles and usage limits"
+    },
+    "/users/{userId}/conversations/{conversationId}": {
+      "schema": {
+        "$ref": "#/entities/Conversation"
+      },
+      "description": "Scoped conversations belonging exclusively to userId"
+    },
+    "/users/{userId}/conversations/{conversationId}/messages/{messageId}": {
+      "schema": {
+        "$ref": "#/entities/MessageRecord"
+      },
+      "description": "Messages inside a user's conversation"
     },
     "/settings/{settingId}": {
       "schema": {
         "$ref": "#/entities/AppSettings"
       },
-      "description": "Stores global app branding and logo selections"
+      "description": "Application settings and branding"
     },
     "/sessions/{sessionId}": {
       "schema": {
         "$ref": "#/entities/LiveSession"
       },
-      "description": "Tracks active live users across devices"
+      "description": "Active connected sessions"
     }
   }
 }

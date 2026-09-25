@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { X, Sliders, Check, Trash2, ShieldCheck, Cpu } from 'lucide-react';
+import { X, Sliders, Check, Trash2, Sun, Moon, Laptop, UserX, AlertTriangle } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -7,6 +8,8 @@ interface SettingsModalProps {
   customSystemPrompt: string;
   onSaveSystemPrompt: (prompt: string) => void;
   onClearAllChats: () => void;
+  theme?: 'dark' | 'light' | 'system';
+  onSelectTheme?: (theme: 'dark' | 'light' | 'system') => void;
 }
 
 const PRESET_PERSONAS = [
@@ -42,10 +45,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   customSystemPrompt,
   onSaveSystemPrompt,
   onClearAllChats,
+  theme = 'dark',
+  onSelectTheme,
 }) => {
+  const { currentUser, deleteAccount } = useAuth();
   const [prompt, setPrompt] = useState(customSystemPrompt);
   const [selectedPersona, setSelectedPersona] = useState('default');
   const [confirmClear, setConfirmClear] = useState(false);
+  const [confirmDeleteAccount, setConfirmDeleteAccount] = useState(false);
 
   if (!isOpen) return null;
 
@@ -59,35 +66,89 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     onClose();
   };
 
+  const handleDeleteAccount = async () => {
+    if (currentUser?.id) {
+      await deleteAccount(currentUser.id);
+      onClose();
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-950/60 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="bg-white dark:bg-[#1C1C1F] border border-stone-200 dark:border-stone-800 rounded-2xl w-full max-w-xl shadow-2xl flex flex-col overflow-hidden max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
+      <div className="bg-[#1C1C1F] border border-[#2D2D30] rounded-2xl w-full max-w-xl shadow-2xl flex flex-col overflow-hidden max-h-[90vh] text-[#EDEDEB]">
         {/* Header */}
-        <div className="p-4 border-b border-stone-200 dark:border-stone-800 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+        <div className="p-4 border-b border-[#2D2D30] flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-[#E07A5F] flex items-center justify-center">
               <Sliders className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-semibold text-sm text-stone-900 dark:text-stone-100">
+              <h3 className="font-semibold text-sm text-white">
                 Workspace Preferences
               </h3>
-              <p className="text-xs text-stone-500">Customize dheeraj-claude system instructions</p>
+              <p className="text-xs text-[#9B9B97]">Customize Aura system instructions, theme & account</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-stone-400 hover:text-stone-600 dark:hover:text-stone-200"
+            className="p-1 rounded-lg text-[#8E8E8B] hover:text-white transition cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Content */}
-        <div className="p-4 space-y-4 overflow-y-auto flex-1">
+        <div className="p-4 space-y-5 overflow-y-auto flex-1 text-xs">
+          {/* Theme Selector */}
+          <div>
+            <label className="block text-xs font-semibold text-[#C4C4C2] uppercase tracking-wider mb-2">
+              Appearance & Theme
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => onSelectTheme?.('dark')}
+                className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border transition cursor-pointer ${
+                  theme === 'dark'
+                    ? 'border-[#E07A5F] bg-[#E07A5F]/10 text-white'
+                    : 'border-[#2D2D30] bg-[#222225] text-[#9B9B97] hover:text-white'
+                }`}
+              >
+                <Moon className="w-4 h-4" />
+                <span>Dark</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onSelectTheme?.('light')}
+                className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border transition cursor-pointer ${
+                  theme === 'light'
+                    ? 'border-[#E07A5F] bg-[#E07A5F]/10 text-white'
+                    : 'border-[#2D2D30] bg-[#222225] text-[#9B9B97] hover:text-white'
+                }`}
+              >
+                <Sun className="w-4 h-4" />
+                <span>Light</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onSelectTheme?.('system')}
+                className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border transition cursor-pointer ${
+                  theme === 'system'
+                    ? 'border-[#E07A5F] bg-[#E07A5F]/10 text-white'
+                    : 'border-[#2D2D30] bg-[#222225] text-[#9B9B97] hover:text-white'
+                }`}
+              >
+                <Laptop className="w-4 h-4" />
+                <span>System</span>
+              </button>
+            </div>
+          </div>
+
           {/* Persona selector */}
           <div>
-            <label className="block text-xs font-semibold text-stone-700 dark:text-stone-300 uppercase tracking-wider mb-2">
+            <label className="block text-xs font-semibold text-[#C4C4C2] uppercase tracking-wider mb-2">
               Coding Persona Preset
             </label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -100,13 +161,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     onClick={() => handleSelectPersona(p)}
                     className={`p-3 text-left rounded-xl border transition text-xs flex flex-col justify-between ${
                       isSelected
-                        ? 'border-amber-500 bg-amber-500/10 text-stone-900 dark:text-stone-100'
-                        : 'border-stone-200 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-800/40 text-stone-600 dark:text-stone-400'
+                        ? 'border-[#E07A5F] bg-[#E07A5F]/10 text-white'
+                        : 'border-[#2D2D30] bg-[#222225] hover:bg-[#28282B] text-[#9B9B97]'
                     }`}
                   >
-                    <div className="font-semibold text-stone-800 dark:text-stone-200 mb-1 flex items-center justify-between">
+                    <div className="font-semibold text-white mb-1 flex items-center justify-between">
                       <span>{p.title}</span>
-                      {isSelected && <Check className="w-3.5 h-3.5 text-amber-500" />}
+                      {isSelected && <Check className="w-3.5 h-3.5 text-[#E07A5F]" />}
                     </div>
                     <p className="text-[11px] opacity-80 line-clamp-2 leading-relaxed">{p.desc}</p>
                   </button>
@@ -117,86 +178,122 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
           {/* Custom System Prompt Textarea */}
           <div>
-            <label className="block text-xs font-semibold text-stone-700 dark:text-stone-300 uppercase tracking-wider mb-1">
+            <label className="block text-xs font-semibold text-[#C4C4C2] uppercase tracking-wider mb-1">
               Custom Prompt Instructions (Optional)
             </label>
-            <p className="text-xs text-stone-500 mb-2">
-              Give dheeraj-claude specialized context about your project, coding conventions, or preferences.
+            <p className="text-xs text-[#8E8E8B] mb-2">
+              Give Aura specialized context about your project, coding conventions, or preferences.
             </p>
             <textarea
               value={prompt}
               onChange={e => setPrompt(e.target.value)}
               placeholder="e.g. Always write code using TypeScript with strict types and Tailwind CSS..."
               rows={4}
-              className="w-full p-3 font-mono text-xs bg-stone-100 dark:bg-[#141416] border border-stone-200 dark:border-stone-800 rounded-xl text-stone-900 dark:text-stone-100 focus:outline-none focus:ring-1 focus:ring-amber-500 resize-none leading-relaxed"
+              className="w-full p-3 font-mono text-xs bg-[#151517] border border-[#2D2D30] rounded-xl text-white focus:outline-none focus:border-[#E07A5F] resize-none leading-relaxed"
             />
           </div>
 
           {/* Clear history */}
-          <div className="pt-2 border-t border-stone-200 dark:border-stone-800">
-            <div className="flex items-center justify-between">
+          <div className="pt-3 border-t border-[#2D2D30] flex items-center justify-between">
+            <div>
+              <span className="text-xs font-medium text-white block">
+                Clear All Conversations
+              </span>
+              <span className="text-[11px] text-[#787875]">
+                Permanently wipes all conversation history from your workspace
+              </span>
+            </div>
+            {confirmClear ? (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirmClear(false)}
+                  className="px-2.5 py-1 text-xs text-[#8E8E8B] hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClearAllChats();
+                    setConfirmClear(false);
+                    onClose();
+                  }}
+                  className="px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-medium"
+                >
+                  Confirm Wipe
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmClear(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 border border-[#3A3A3E] hover:border-rose-500/50 hover:text-rose-400 text-[#8E8E8B] rounded-lg transition"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Clear</span>
+              </button>
+            )}
+          </div>
+
+          {/* Account Deletion Flow */}
+          {currentUser && (
+            <div className="pt-3 border-t border-[#2D2D30] flex items-center justify-between">
               <div>
-                <span className="text-xs font-semibold text-stone-800 dark:text-stone-200 block">
-                  Clear All Chat Sessions
+                <span className="text-xs font-medium text-rose-400 block">
+                  Delete Account ({currentUser.id})
                 </span>
-                <span className="text-[11px] text-stone-500">
-                  Permanently deletes all saved conversations and code history
+                <span className="text-[11px] text-[#787875]">
+                  Remove your profile and data permanently from the system
                 </span>
               </div>
-              {confirmClear ? (
-                <div className="flex items-center gap-1.5">
+              {confirmDeleteAccount ? (
+                <div className="flex items-center gap-2">
                   <button
-                    onClick={() => {
-                      onClearAllChats();
-                      setConfirmClear(false);
-                      onClose();
-                    }}
-                    className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-medium"
-                  >
-                    Confirm Delete
-                  </button>
-                  <button
-                    onClick={() => setConfirmClear(false)}
-                    className="px-2 py-1 text-xs text-stone-400 hover:text-stone-600"
+                    type="button"
+                    onClick={() => setConfirmDeleteAccount(false)}
+                    className="px-2.5 py-1 text-xs text-[#8E8E8B] hover:text-white"
                   >
                     Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDeleteAccount}
+                    className="px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-medium"
+                  >
+                    Confirm Deletion
                   </button>
                 </div>
               ) : (
                 <button
                   type="button"
-                  onClick={() => setConfirmClear(true)}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-xl border border-rose-500/30 text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 text-xs font-medium transition"
+                  onClick={() => setConfirmDeleteAccount(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 border border-rose-900/40 text-rose-400 hover:bg-rose-950/40 rounded-lg transition"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Clear All</span>
+                  <UserX className="w-3.5 h-3.5" />
+                  <span>Delete</span>
                 </button>
               )}
             </div>
-          </div>
+          )}
         </div>
 
         {/* Footer */}
-        <div className="p-3 border-t border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-[#18181A] flex items-center justify-between">
-          <div className="flex items-center gap-1.5 text-[11px] text-stone-400">
-            <Cpu className="w-3.5 h-3.5 text-amber-500" />
-            <span>dheeraj-claude v3.7 • Gemini 3.8 Engine</span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={onClose}
-              className="px-3 py-1.5 text-xs text-stone-600 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-800 rounded-xl"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSave}
-              className="px-4 py-1.5 text-xs font-medium rounded-xl bg-amber-600 hover:bg-amber-700 text-white shadow-sm transition"
-            >
-              Save Preferences
-            </button>
-          </div>
+        <div className="p-4 border-t border-[#2D2D30] bg-[#171719] flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 rounded-xl text-xs text-[#8E8E8B] hover:text-white transition"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            className="px-4 py-2 rounded-xl bg-[#E07A5F] hover:bg-[#D3684B] text-white text-xs font-semibold transition shadow-md"
+          >
+            Save Preferences
+          </button>
         </div>
       </div>
     </div>

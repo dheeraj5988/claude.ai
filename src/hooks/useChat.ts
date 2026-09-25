@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { ChatSession, Message, Artifact, ModelId, Attachment, EffortLevel } from '../types';
 import { parseStreamContent } from '../utils/parser';
+import { generateSmartTitle } from '../utils/titleGenerator';
 
 const STORAGE_KEY_SESSIONS = 'dheeraj_claude_sessions_v1';
 const STORAGE_KEY_ACTIVE = 'dheeraj_claude_active_session_id_v1';
@@ -12,6 +13,7 @@ const DEFAULT_SEED_SESSIONS: ChatSession[] = [
     isPinned: true,
     createdAt: Date.now() - 3600000 * 2,
     updatedAt: Date.now() - 3600000 * 2,
+    userMessageCount: 0,
     messages: [],
     model: 'sonnet-5',
     effort: 'Medium',
@@ -23,6 +25,7 @@ const DEFAULT_SEED_SESSIONS: ChatSession[] = [
     isPinned: true,
     createdAt: Date.now() - 3600000 * 4,
     updatedAt: Date.now() - 3600000 * 4,
+    userMessageCount: 0,
     messages: [],
     model: 'sonnet-5',
     effort: 'Medium',
@@ -34,6 +37,7 @@ const DEFAULT_SEED_SESSIONS: ChatSession[] = [
     isPinned: true,
     createdAt: Date.now() - 3600000 * 6,
     updatedAt: Date.now() - 3600000 * 6,
+    userMessageCount: 0,
     messages: [],
     model: 'sonnet-5',
     effort: 'Medium',
@@ -45,6 +49,7 @@ const DEFAULT_SEED_SESSIONS: ChatSession[] = [
     isPinned: false,
     createdAt: Date.now() - 3600000 * 8,
     updatedAt: Date.now() - 3600000 * 8,
+    userMessageCount: 0,
     messages: [],
     model: 'sonnet-5',
     effort: 'Medium',
@@ -56,6 +61,7 @@ const DEFAULT_SEED_SESSIONS: ChatSession[] = [
     isPinned: false,
     createdAt: Date.now() - 3600000 * 10,
     updatedAt: Date.now() - 3600000 * 10,
+    userMessageCount: 0,
     messages: [],
     model: 'sonnet-5',
     effort: 'Medium',
@@ -67,6 +73,7 @@ const DEFAULT_SEED_SESSIONS: ChatSession[] = [
     isPinned: false,
     createdAt: Date.now() - 3600000 * 12,
     updatedAt: Date.now() - 3600000 * 12,
+    userMessageCount: 0,
     messages: [],
     model: 'sonnet-5',
     effort: 'Medium',
@@ -78,6 +85,7 @@ const DEFAULT_SEED_SESSIONS: ChatSession[] = [
     isPinned: false,
     createdAt: Date.now() - 3600000 * 14,
     updatedAt: Date.now() - 3600000 * 14,
+    userMessageCount: 0,
     messages: [],
     model: 'sonnet-5',
     effort: 'Medium',
@@ -89,6 +97,7 @@ const DEFAULT_SEED_SESSIONS: ChatSession[] = [
     isPinned: false,
     createdAt: Date.now() - 3600000 * 16,
     updatedAt: Date.now() - 3600000 * 16,
+    userMessageCount: 0,
     messages: [],
     model: 'sonnet-5',
     effort: 'Medium',
@@ -96,13 +105,36 @@ const DEFAULT_SEED_SESSIONS: ChatSession[] = [
   },
 ];
 
-export function useChat() {
+export interface UseChatOptions {
+  claudeSettings?: {
+    apiKey?: string;
+    model?: string;
+    firstMessagesCount?: number;
+    enabled?: boolean;
+  };
+  geminiSettings?: {
+    apiKey?: string;
+    apiKeys?: Array<{ apiKey: string; status?: string }>;
+    model?: string;
+    enabled?: boolean;
+  };
+}
+
+export function useChat(options?: UseChatOptions) {
   const [sessions, setSessions] = useState<ChatSession[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_SESSIONS);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((s: any) => ({
+            ...s,
+            userMessageCount:
+              typeof s.userMessageCount === 'number'
+                ? s.userMessageCount
+                : (s.messages || []).filter((m: any) => m.role === 'user').length,
+          }));
+        }
       }
     } catch (e) {
       console.error('Failed to load sessions from localStorage', e);
@@ -153,6 +185,7 @@ export function useChat() {
         title: 'New conversation',
         createdAt: Date.now(),
         updatedAt: Date.now(),
+        userMessageCount: 0,
         messages: [],
         model: 'sonnet-5',
         effort: 'Medium',
@@ -174,6 +207,7 @@ export function useChat() {
       title: initialPrompt ? initialPrompt.slice(0, 32) + '...' : 'New conversation',
       createdAt: Date.now(),
       updatedAt: Date.now(),
+      userMessageCount: 0,
       messages: [],
       model: currentModel,
       effort,
@@ -197,6 +231,7 @@ export function useChat() {
           title: 'New conversation',
           createdAt: Date.now(),
           updatedAt: Date.now(),
+          userMessageCount: 0,
           messages: [],
           model: currentModel,
           effort,
@@ -340,6 +375,10 @@ export function useChat() {
         prev.map(sess => {
           if (sess.id !== activeSessionId) return sess;
 
+          const priorCount = typeof sess.userMessageCount === 'number'
+            ? sess.userMessageCount
+            : (sess.messages || []).filter(m => m.role === 'user').length;
+          const nextCount = priorCount + 1;
           const isFirstMessage = sess.messages.length === 0;
           const newTitle = isFirstMessage
             ? content.slice(0, 36) || (attachments?.[0]?.name ? `Code: ${attachments[0].name}` : 'New chat')
@@ -349,6 +388,7 @@ export function useChat() {
             ...sess,
             title: newTitle,
             updatedAt: Date.now(),
+            userMessageCount: nextCount,
             messages: [...sess.messages, userMessage, assistantPlaceholder],
           };
         })
@@ -359,6 +399,7 @@ export function useChat() {
 
       const controller = new AbortController();
       abortControllerRef.current = controller;
+      let rawAccumulated = '';
 
       try {
         const currentChat = sessions.find(s => s.id === activeSessionId);
@@ -369,24 +410,52 @@ export function useChat() {
           attachments: m.attachments,
         }));
 
-        let claudeApiKey: string | undefined;
-        let claudeModel: string | undefined;
-        let claudeFirstCount: number | undefined;
-        try {
-          const saved = localStorage.getItem('claude_api_settings_v2');
-          if (saved) {
-            const parsed = JSON.parse(saved);
-            if (parsed.apiKey) claudeApiKey = parsed.apiKey;
-            if (parsed.model) claudeModel = parsed.model;
-            if (parsed.firstMessagesCount) claudeFirstCount = parsed.firstMessagesCount;
-          }
-        } catch {}
+        let claudeApiKey: string | undefined = options?.claudeSettings?.apiKey;
+        let claudeModel: string | undefined = options?.claudeSettings?.model;
+        let claudeFirstCount: number | undefined = options?.claudeSettings?.firstMessagesCount;
+
+        if (!claudeApiKey) {
+          try {
+            const saved = localStorage.getItem('claude_api_settings_v2');
+            if (saved) {
+              const parsed = JSON.parse(saved);
+              if (parsed.apiKey) claudeApiKey = parsed.apiKey;
+              if (parsed.model) claudeModel = parsed.model;
+              if (parsed.firstMessagesCount) claudeFirstCount = parsed.firstMessagesCount;
+            }
+          } catch {}
+        }
+
+        let geminiApiKey: string | undefined = options?.geminiSettings?.apiKey;
+        let geminiApiKeys: string[] | undefined = options?.geminiSettings?.apiKeys
+          ?.filter(k => k.apiKey && k.status !== 'disabled')
+          ?.map(k => k.apiKey);
+        let geminiModel: string | undefined = options?.geminiSettings?.model;
+
+        if (!geminiApiKey) {
+          try {
+            const gemSaved = localStorage.getItem('gemini_api_settings_v2');
+            if (gemSaved) {
+              const gemParsed = JSON.parse(gemSaved);
+              if (gemParsed.apiKey) geminiApiKey = gemParsed.apiKey;
+              if (gemParsed.model) geminiModel = gemParsed.model;
+              if (Array.isArray(gemParsed.apiKeys) && (!geminiApiKeys || geminiApiKeys.length === 0)) {
+                geminiApiKeys = gemParsed.apiKeys
+                  .filter((k: any) => k.apiKey && k.status !== 'disabled')
+                  .map((k: any) => k.apiKey);
+              }
+            }
+          } catch {}
+        }
+
+        const priorUserCount = (currentChat?.messages || []).filter(m => m.role === 'user').length;
 
         const res = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             messages: payloadMessages,
+            userMessageCount: priorUserCount,
             model: activeModelToUse,
             effort,
             thinkingEnabled,
@@ -394,6 +463,9 @@ export function useChat() {
             claudeApiKey,
             claudeModel,
             claudeFirstCount: claudeFirstCount || 2,
+            geminiApiKey,
+            geminiApiKeys,
+            geminiModel,
           }),
           signal: controller.signal,
         });
@@ -417,8 +489,9 @@ export function useChat() {
         if (!reader) throw new Error('Response body stream is not available');
 
         const decoder = new TextDecoder();
-        let rawAccumulated = '';
+        rawAccumulated = '';
         let sseBuffer = '';
+        let detectedProvider: 'anthropic' | 'gemini' = priorUserCount < 2 ? 'anthropic' : 'gemini';
 
         while (true) {
           const { value, done } = await reader.read();
@@ -471,6 +544,7 @@ export function useChat() {
                           thoughtDurationSeconds: thoughtDuration,
                           isThinking: parsedStream.isThinking,
                           artifacts: parsedStream.artifacts,
+                          provider: detectedProvider,
                           modelUsed: activeModelToUse,
                         };
                       }),
@@ -486,6 +560,14 @@ export function useChat() {
               } catch (err) {
                 console.warn('Error parsing SSE chunk:', err);
               }
+            } else if (eventType === 'done' && eventData) {
+              try {
+                const doneParsed = JSON.parse(eventData);
+                if (doneParsed.provider) {
+                  detectedProvider =
+                    doneParsed.provider === 'claude' ? 'anthropic' : doneParsed.provider;
+                }
+              } catch {}
             } else if (eventType === 'error') {
               try {
                 const errParsed = JSON.parse(eventData);
@@ -497,19 +579,34 @@ export function useChat() {
           }
         }
 
-        // Finalize message status
+        // Finalize message status and auto-title on first assistant turn
         setSessions(prev =>
           prev.map(sess => {
             if (sess.id !== activeSessionId) return sess;
+            const parsedFinal = parseStreamContent(rawAccumulated, assistantMsgId);
+
+            // Auto-generate catchy title on first assistant turn if still using default or prompt snippet
+            const isFirstTurn = (sess.userMessageCount || 0) <= 1 || sess.messages.length <= 2;
+            let finalTitle = sess.title;
+            if (
+              isFirstTurn &&
+              (sess.title === 'New conversation' ||
+                sess.title.endsWith('...') ||
+                sess.title.startsWith('Code: '))
+            ) {
+              finalTitle = generateSmartTitle(content, parsedFinal.cleanContent);
+            }
+
             return {
               ...sess,
+              title: finalTitle,
               messages: sess.messages.map(m => {
                 if (m.id !== assistantMsgId) return m;
-                const parsedFinal = parseStreamContent(rawAccumulated, assistantMsgId);
                 return {
                   ...m,
                   status: 'completed',
                   isThinking: false,
+                  provider: detectedProvider,
                   content: parsedFinal.cleanContent,
                   artifacts: parsedFinal.artifacts,
                   modelUsed: activeModelToUse,
@@ -521,6 +618,26 @@ export function useChat() {
       } catch (err: any) {
         if (err.name === 'AbortError') {
           console.log('User cancelled generation');
+          setSessions(prev =>
+            prev.map(sess => {
+              if (sess.id !== activeSessionId) return sess;
+              const parsedFinal = parseStreamContent(rawAccumulated, assistantMsgId);
+              return {
+                ...sess,
+                messages: sess.messages.map(m => {
+                  if (m.id !== assistantMsgId) return m;
+                  return {
+                    ...m,
+                    status: 'completed',
+                    isThinking: false,
+                    content: parsedFinal.cleanContent || m.content || '(Response paused)',
+                    artifacts: parsedFinal.artifacts,
+                    modelUsed: activeModelToUse,
+                  };
+                }),
+              };
+            })
+          );
         } else {
           console.error('Chat error:', err);
           const friendlyMessage =
@@ -578,6 +695,37 @@ export function useChat() {
     [activeSession, isStreaming, activeSessionId, currentModel, sendMessage]
   );
 
+  // Toggle archive status
+  const toggleArchiveChat = useCallback((id: string) => {
+    setSessions(prev =>
+      prev.map(s => (s.id === id ? { ...s, archived: !s.archived } : s))
+    );
+  }, []);
+
+  // Edit and resend an earlier user message
+  const editAndResendMessage = useCallback(
+    (messageId: string, newContent: string) => {
+      if (!activeSession || isStreaming) return;
+      const msgs = activeSession.messages;
+      const targetIdx = msgs.findIndex(m => m.id === messageId);
+      if (targetIdx === -1) return;
+
+      const userMsg = msgs[targetIdx];
+
+      // Truncate to before this message
+      setSessions(prev =>
+        prev.map(s => {
+          if (s.id !== activeSessionId) return s;
+          return { ...s, messages: s.messages.slice(0, targetIdx) };
+        })
+      );
+
+      // Resend updated text
+      sendMessage(newContent, userMsg.attachments);
+    },
+    [activeSession, isStreaming, activeSessionId, sendMessage]
+  );
+
   return {
     sessions,
     activeSession,
@@ -587,6 +735,8 @@ export function useChat() {
     deleteChat,
     renameChat,
     togglePinChat,
+    toggleArchiveChat,
+    editAndResendMessage,
     openBlankPlayground,
     currentModel,
     setCurrentModel,

@@ -10,6 +10,7 @@ import { SettingsModal } from './components/SettingsModal';
 import { AdminPage } from './pages/AdminPage';
 import { LoginModal } from './components/LoginModal';
 import { CenterChatLogo } from './components/CenterChatLogo';
+import { AboutModal } from './components/AboutModal';
 import { useAuth } from './context/AuthContext';
 import { getRandomGreeting } from './utils/greeting';
 import { AppLogoIcon } from './logos/AppLogoIcon';
@@ -17,7 +18,7 @@ import { Artifact, Attachment } from './types';
 import { ClaudeToast } from './components/ClaudeToast';
 
 export default function App() {
-  const { currentUser, activeLogo } = useAuth();
+  const { currentUser, activeLogo, claudeSettings, geminiSettings } = useAuth();
   const {
     sessions,
     activeSession,
@@ -27,6 +28,8 @@ export default function App() {
     deleteChat,
     renameChat,
     togglePinChat,
+    toggleArchiveChat,
+    editAndResendMessage,
     openBlankPlayground,
     currentModel,
     setCurrentModel,
@@ -43,12 +46,13 @@ export default function App() {
     isArtifactPanelOpen,
     setIsArtifactPanelOpen,
     updateArtifactCode,
-  } = useChat();
+  } = useChat({ claudeSettings, geminiSettings });
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [coworkModalOpen, setCoworkModalOpen] = useState(false);
   const [snippetModalOpen, setSnippetModalOpen] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+  const [aboutModalOpen, setAboutModalOpen] = useState(false);
   const [appToastMessage, setAppToastMessage] = useState<string | null>(null);
 
   // Dedicated Route State: 'chat' or 'admin' (complete separate webpage, NOT a popup modal)
@@ -128,7 +132,7 @@ export default function App() {
     document.documentElement.classList.add('dark');
   }, []);
 
-  // Synchronize website favicon with center logo (Claude terracotta starburst) & tab title
+  // Synchronize website favicon with Claude mark & tab title
   useEffect(() => {
     const faviconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none"><g fill="#D97757"><polygon points="46,38 56,38 65,45 68,54 64,64 54,69 44,67 36,58 37,47 43,40" /><polygon points="43,39 27,8 33,3 38,12 47,37" /><polygon points="50,37 57,5 62,3 64,10 56,37" /><polygon points="58,39 79,16 84,13 86,19 63,42" /><polygon points="64,44 94,39 98,43 93,48 66,49" /><polygon points="67,51 97,59 96,65 91,66 65,58" /><polygon points="65,60 87,79 84,84 79,83 62,65" /><polygon points="60,66 74,90 69,93 64,91 56,69" /><polygon points="53,70 51,97 45,98 43,93 47,69" /><polygon points="45,68 28,90 23,87 25,82 40,65" /><polygon points="39,63 15,75 12,71 14,66 36,58" /><polygon points="36,54 2,49 1,44 6,43 36,47" /><polygon points="37,46 11,28 14,24 19,25 39,41" /><polygon points="40,41 23,17 28,14 31,18 43,39" /></g></svg>`;
     const dataUri = `data:image/svg+xml,${encodeURIComponent(faviconSvg)}`;
@@ -141,7 +145,6 @@ export default function App() {
     link.type = 'image/svg+xml';
     link.href = dataUri;
 
-    // Also update apple-touch-icon
     let appleLink = document.querySelector("link[rel='apple-touch-icon']") as HTMLLinkElement | null;
     if (!appleLink) {
       appleLink = document.createElement('link');
@@ -154,7 +157,7 @@ export default function App() {
   // Update website title shown in Chrome tab
   useEffect(() => {
     if (currentRoute === 'admin') {
-      document.title = 'Admin Panel · Claude';
+      document.title = 'Admin Dashboard · Claude';
     } else if (activeSession && activeSession.title && activeSession.title !== 'New chat') {
       document.title = `${activeSession.title} · Claude`;
     } else {
@@ -258,11 +261,13 @@ export default function App() {
         onDeleteChat={deleteChat}
         onRenameChat={renameChat}
         onTogglePin={togglePinChat}
+        onToggleArchive={toggleArchiveChat}
         onOpenPlayground={openBlankPlayground}
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
         onShowToast={msg => setAppToastMessage(msg)}
         onOpenAdmin={() => navigateTo('admin')}
+        onOpenAbout={() => setAboutModalOpen(true)}
       />
 
       {/* Main App Container */}
@@ -273,15 +278,15 @@ export default function App() {
             {!hasMessages ? (
               /* Hero View */
               <div className="flex-1 flex flex-col items-center justify-center px-4 w-full max-w-3xl mx-auto -mt-12">
-                {/* Designed Center Chat Logo + Dynamic User Greeting */}
+                {/* Claude Starburst + Dynamic User Greeting */}
                 <div className="flex items-center justify-center gap-3.5 mb-6 select-none text-center px-4">
-                  <CenterChatLogo size={36} />
+                  <CenterChatLogo size={42} />
                   <h1 className="font-serif text-3xl md:text-4xl text-[#EDEDEB] tracking-tight font-normal">
                     {dynamicGreeting}
                   </h1>
                 </div>
 
-                {/* Center-aligned Claude Chat Box */}
+                {/* Center-aligned Chat Box */}
                 <ClaudeChatBox
                   onSendMessage={sendMessage}
                   isStreaming={isStreaming}
@@ -293,6 +298,7 @@ export default function App() {
                   thinkingEnabled={thinkingEnabled}
                   onToggleThinking={() => setThinkingEnabled(!thinkingEnabled)}
                   onOpenCoworkModal={() => setCoworkModalOpen(true)}
+                  activeSessionId={activeSessionId}
                   autoFocus
                 />
               </div>
@@ -301,7 +307,7 @@ export default function App() {
               <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden">
                 {/* Header: Session Title Dropdown */}
                 <div className="h-10 px-4 md:px-6 flex items-center shrink-0 z-10">
-                  <ChatTitleDropdown title={activeSession?.title || 'hello which model are you'} />
+                  <ChatTitleDropdown title={activeSession?.title || 'Conversation'} />
                 </div>
 
                 <ChatFeed
@@ -309,6 +315,7 @@ export default function App() {
                   isStreaming={isStreaming}
                   onOpenArtifact={handleOpenArtifact}
                   onRetry={retryLastMessage}
+                  onEditAndResend={editAndResendMessage}
                 />
 
                 {/* Docked Chatbox at bottom */}
@@ -324,6 +331,7 @@ export default function App() {
                     thinkingEnabled={thinkingEnabled}
                     onToggleThinking={() => setThinkingEnabled(!thinkingEnabled)}
                     onOpenCoworkModal={() => setCoworkModalOpen(true)}
+                    activeSessionId={activeSessionId}
                     isDocked={true}
                   />
                 </div>
@@ -372,7 +380,13 @@ export default function App() {
         onShowToast={msg => setAppToastMessage(msg)}
       />
 
-      {/* Claude Toast for Sidebar & General Notices */}
+      {/* About Claude & Multi-Provider Routing Modal */}
+      <AboutModal
+        isOpen={aboutModalOpen}
+        onClose={() => setAboutModalOpen(false)}
+      />
+
+      {/* Toast for Notices */}
       <ClaudeToast
         message={appToastMessage}
         onClose={() => setAppToastMessage(null)}

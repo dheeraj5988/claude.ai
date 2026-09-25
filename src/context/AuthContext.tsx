@@ -16,6 +16,8 @@ export interface UserAccount {
   email: string; // e.g. "ankitasharma19890507@gmail.com"
   password: string; // user password set by admin
   plan: 'Pro' | 'Free' | 'Max';
+  role?: 'user' | 'admin';
+  status?: 'active' | 'disabled';
   createdAt: number;
   lastActiveAt?: number;
 }
@@ -25,6 +27,21 @@ export interface ClaudeSettings {
   model: string; // e.g. "claude-3-5-sonnet-20241022"
   enabled: boolean;
   firstMessagesCount: number; // default: 2 (messages 1 & 2 handled by Claude, 3+ by Gemini)
+}
+
+export interface GeminiKeyAccount {
+  id: string;
+  name: string; // e.g. "Account 1", "Work Project", "Personal Key"
+  apiKey: string;
+  status: 'active' | 'quota_exhausted' | 'disabled';
+  addedAt: number;
+}
+
+export interface GeminiSettings {
+  apiKey: string; // Primary key fallback
+  apiKeys: GeminiKeyAccount[]; // Multiple accounts pool
+  model: string; // default "gemini-2.5-flash"
+  enabled: boolean;
 }
 
 export interface LiveSessionInfo {
@@ -55,6 +72,13 @@ const DEFAULT_CLAUDE_SETTINGS: ClaudeSettings = {
   firstMessagesCount: 2,
 };
 
+const DEFAULT_GEMINI_SETTINGS: GeminiSettings = {
+  apiKey: '',
+  apiKeys: [],
+  model: 'gemini-2.5-flash',
+  enabled: true,
+};
+
 interface AuthContextType {
   currentUser: UserAccount | null;
   users: UserAccount[];
@@ -64,6 +88,10 @@ interface AuthContextType {
   setActiveLogo: (logo: AppLogo) => void;
   claudeSettings: ClaudeSettings;
   updateClaudeSettings: (settings: Partial<ClaudeSettings>) => Promise<boolean>;
+  geminiSettings: GeminiSettings;
+  updateGeminiSettings: (settings: Partial<GeminiSettings>) => Promise<boolean>;
+  addGeminiKeyAccount: (name: string, apiKey: string) => Promise<boolean>;
+  removeGeminiKeyAccount: (id: string) => Promise<boolean>;
   login: (idOrEmail: string, pass: string) => boolean;
   logout: () => void;
   loginAdmin: (pass: string) => boolean;
@@ -99,7 +127,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const [liveSessions, setLiveSessions] = useState<Record<string, LiveSessionInfo>>({});
 
-  // FIRST TIME OPENING: Prompt for login details (start as null if not already authenticated)
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => {
     try {
       const stored = localStorage.getItem(CURRENT_USER_KEY);
@@ -141,6 +168,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return DEFAULT_CLAUDE_SETTINGS;
   });
 
+  const [geminiSettings, setGeminiSettingsState] = useState<GeminiSettings>(() => {
+    try {
+      const stored = localStorage.getItem('gemini_api_settings_v2');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && typeof parsed === 'object') return { ...DEFAULT_GEMINI_SETTINGS, ...parsed };
+      }
+    } catch {}
+    return DEFAULT_GEMINI_SETTINGS;
+  });
+
   // 1. Initial Firestore connection probe
   useEffect(() => {
     validateFirestoreConnection();
@@ -165,7 +203,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(remoteUsers));
             }
           } else {
-            // First time seed default account into cloud database
             const defaultUser = DEFAULT_USERS[0];
             setDoc(doc(db, 'users', defaultUser.id), defaultUser).catch(() => {});
           }
@@ -181,7 +218,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
-  // 3. Real-time synchronization of active logo and Claude settings from Cloud Database (Firestore)
+  // 3. Real-time synchronization of active logo, Claude, and Gemini settings from Firestore
   useEffect(() => {
     try {
       const unsubscribe = onSnapshot(
@@ -196,6 +233,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (data?.claudeSettings) {
               setClaudeSettingsState(data.claudeSettings);
               localStorage.setItem('claude_api_settings_v2', JSON.stringify(data.claudeSettings));
+            }
+            if (data?.geminiSettings) {
+              setGeminiSettingsState(data.geminiSettings);
+              localStorage.setItem('gemini_api_settings_v2', JSON.stringify(data.geminiSettings));
             }
           }
         },
@@ -246,76 +287,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const map: Record<string, LiveSessionInfo> = {};
           const now = Date.now();
           snapshot.forEach(docSnap => {
-            const data = docSnap.data() as LiveSessionInfo;
-            // Only count sessions active within the last 2 minutes
-            if (data && data.lastActiveAt && now - data.lastActiveAt < 120000) {
-              map[data.sessionId || docSnap.id] = data;
+            const info = docSnap.data() as LiveSessionInfo;
+            if (info && info.userId && now - (info.lastActiveAt || 0) < 60000) {
+              map[info.sessionId || docSnap.id] = info;
             }
           });
           setLiveSessions(map);
         },
         err => {
-          console.warn('Firestore live sessions fallback:', err.message);
+          console.warn('Live sessions sync fallback:', err.message);
         }
       );
 
       return () => unsubscribe();
-    } catch {
-      // ignore
+    } catch (e) {
+      console.warn('Live sessions listener error:', e);
     }
   }, []);
 
-  const setActiveLogo = (logo: AppLogo) => {
-    setActiveLogoState(logo);
-    try {
-      localStorage.setItem(ACTIVE_LOGO_KEY, JSON.stringify(logo));
-      // Sync to cloud database so all users across the world see the new logo
-      setDoc(doc(db, 'settings', 'app'), {
-        activeLogo: logo,
-        updatedAt: Date.now(),
-      }).catch(err => console.warn('Could not sync logo to Firestore:', err));
-    } catch {
-      // ignore
-    }
-  };
-
-  // Save current active user locally
-  useEffect(() => {
-    try {
-      if (currentUser) {
-        localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(currentUser));
-      } else {
-        localStorage.removeItem(CURRENT_USER_KEY);
-      }
-    } catch {
-      // ignore
-    }
-  }, [currentUser]);
-
   const login = (idOrEmail: string, pass: string): boolean => {
-    const cleanId = idOrEmail.trim().toLowerCase();
-    const found = users.find(
+    const trimmedInput = idOrEmail.trim().toLowerCase();
+    const user = users.find(
       u =>
-        (u.id.toLowerCase() === cleanId || u.email.toLowerCase() === cleanId) &&
+        (u.id.toLowerCase() === trimmedInput || u.email.toLowerCase() === trimmedInput) &&
         u.password === pass
     );
 
-    if (found) {
-      const updatedUser = { ...found, lastActiveAt: Date.now() };
+    if (user) {
+      const updatedUser: UserAccount = { ...user, lastActiveAt: Date.now() };
       setCurrentUser(updatedUser);
-      setUsers(prev => prev.map(u => (u.id === found.id ? updatedUser : u)));
-      // Update in cloud database
-      setDoc(doc(db, 'users', found.id), updatedUser, { merge: true }).catch(() => {});
+      localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(updatedUser));
       return true;
     }
     return false;
   };
 
   const logout = () => {
-    if (currentUser) {
-      deleteDoc(doc(db, 'sessions', SESSION_ID)).catch(() => {});
-    }
     setCurrentUser(null);
+    localStorage.removeItem(CURRENT_USER_KEY);
+    deleteDoc(doc(db, 'sessions', SESSION_ID)).catch(() => {});
   };
 
   const loginAdmin = (pass: string): boolean => {
@@ -332,9 +342,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     sessionStorage.removeItem(ADMIN_AUTH_KEY);
   };
 
-  const addUser = async (
-    userData: Omit<UserAccount, 'createdAt' | 'lastActiveAt'>
-  ): Promise<boolean> => {
+  const setActiveLogo = async (logo: AppLogo) => {
+    setActiveLogoState(logo);
+    localStorage.setItem(ACTIVE_LOGO_KEY, JSON.stringify(logo));
+    try {
+      await setDoc(doc(db, 'settings', 'app'), { activeLogo: logo }, { merge: true });
+    } catch (e) {
+      console.warn('Could not save logo to Firestore:', e);
+    }
+  };
+
+  const addUser = async (userData: Omit<UserAccount, 'createdAt' | 'lastActiveAt'>): Promise<boolean> => {
     const exists = users.some(
       u =>
         u.id.toLowerCase() === userData.id.toLowerCase() ||
@@ -348,23 +366,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       lastActiveAt: Date.now(),
     };
 
-    // Update local state immediately
-    setUsers(prev => [newUser, ...prev]);
-    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify([newUser, ...users]));
+    const nextUsers = [...users, newUser];
+    setUsers(nextUsers);
+    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(nextUsers));
 
-    // Persist to Cloud Database (Firestore)
     try {
       await setDoc(doc(db, 'users', newUser.id), newUser);
     } catch (err) {
-      console.warn('Persisting user to Firestore error:', err);
+      console.warn('Saving new user to Firestore error:', err);
     }
+
     return true;
   };
 
   const deleteUser = async (userId: string): Promise<boolean> => {
-    setUsers(prev => prev.filter(u => u.id !== userId));
+    const nextUsers = users.filter(u => u.id !== userId);
+    setUsers(nextUsers);
+    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(nextUsers));
+
     if (currentUser?.id === userId) {
-      setCurrentUser(null);
+      logout();
     }
 
     try {
@@ -372,6 +393,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err) {
       console.warn('Deleting user from Firestore error:', err);
     }
+
     return true;
   };
 
@@ -404,6 +426,50 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const updateGeminiSettings = async (settings: Partial<GeminiSettings>): Promise<boolean> => {
+    const merged = { ...geminiSettings, ...settings };
+    setGeminiSettingsState(merged);
+    localStorage.setItem('gemini_api_settings_v2', JSON.stringify(merged));
+    try {
+      await setDoc(doc(db, 'settings', 'app'), { geminiSettings: merged }, { merge: true });
+      return true;
+    } catch (e) {
+      console.warn('Could not save Gemini settings to Firestore:', e);
+      return false;
+    }
+  };
+
+  const addGeminiKeyAccount = async (name: string, apiKey: string): Promise<boolean> => {
+    const trimmedKey = apiKey.trim();
+    if (!trimmedKey) return false;
+
+    const newAccount: GeminiKeyAccount = {
+      id: `gem-acc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      name: name.trim() || `Account ${geminiSettings.apiKeys.length + 1}`,
+      apiKey: trimmedKey,
+      status: 'active',
+      addedAt: Date.now(),
+    };
+
+    const nextKeys = [...(geminiSettings.apiKeys || []), newAccount];
+    const merged: GeminiSettings = {
+      ...geminiSettings,
+      apiKey: geminiSettings.apiKey || trimmedKey, // if primary empty, set primary
+      apiKeys: nextKeys,
+    };
+
+    return updateGeminiSettings(merged);
+  };
+
+  const removeGeminiKeyAccount = async (id: string): Promise<boolean> => {
+    const nextKeys = (geminiSettings.apiKeys || []).filter(k => k.id !== id);
+    const nextPrimary = nextKeys.length > 0 ? nextKeys[0].apiKey : '';
+    return updateGeminiSettings({
+      apiKeys: nextKeys,
+      apiKey: geminiSettings.apiKey === id ? nextPrimary : (geminiSettings.apiKey || nextPrimary),
+    });
+  };
+
   const liveUsersList = Object.values(liveSessions);
 
   return (
@@ -417,6 +483,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setActiveLogo,
         claudeSettings,
         updateClaudeSettings,
+        geminiSettings,
+        updateGeminiSettings,
+        addGeminiKeyAccount,
+        removeGeminiKeyAccount,
         login,
         logout,
         loginAdmin,

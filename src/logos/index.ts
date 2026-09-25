@@ -9,32 +9,32 @@ export interface AppLogo {
 
 export const AVAILABLE_LOGOS: AppLogo[] = [
   {
-    id: 'coral-sunburst',
-    name: 'Anthropic Coral Sunburst (Default)',
+    id: 'aura-amber',
+    name: 'Aura Amber Prism (Default)',
     type: 'svg-sunburst',
-    color: '#DE7959',
+    color: '#E07A5F',
   },
   {
-    id: 'golden-sunburst',
-    name: 'Warm Gold Star',
+    id: 'aura-golden',
+    name: 'Aura Radiant Gold',
     type: 'svg-sunburst',
-    color: '#E5A93C',
+    color: '#F59E0B',
   },
   {
     id: 'cyan-spark',
-    name: 'Electric Cyan Spark',
+    name: 'Aura Electric Cyan',
     type: 'svg-spark',
     color: '#38BDF8',
   },
   {
     id: 'emerald-gem',
-    name: 'Emerald Nexus',
+    name: 'Aura Emerald Nexus',
     type: 'svg-gem',
     color: '#10B981',
   },
   {
     id: 'monochrome-minimal',
-    name: 'Minimal Monochrome Star',
+    name: 'Aura Minimal Monochrome',
     type: 'svg-minimal',
     color: '#EDEDEB',
   },

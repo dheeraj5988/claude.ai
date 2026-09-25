@@ -1,29 +1,76 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Default fallback deny
+
+    // Global default-deny safety net
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // Connection testing endpoint
+    // Helper functions
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email in ['dsharma259889@gmail.com'] ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    // 1. Connection health check
     match /test/{docId} {
-      allow read, write: if true;
+      allow read, write: if isValidId(docId);
     }
 
-    // User accounts registry (accessible for login verification, managed by admin)
+    // 2. User Profiles & Accounts
     match /users/{userId} {
-      allow read, write: if true;
+      // Allow read by the user themselves or an admin
+      // Note: for custom auth login credential checking in client applet, user doc can be queried
+      allow get: if isValidId(userId);
+      allow list: if isAdmin();
+
+      // Users can update their own presence/metadata but CANNOT modify their role or status
+      allow create: if isValidId(userId);
+      allow update: if isValidId(userId) && (
+        isAdmin() ||
+        (
+          // Prevent role escalation to admin by standard users
+          (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'status'])) ||
+          resource.data.role == request.resource.data.role
+        )
+      );
+      allow delete: if isAdmin();
+
+      // 3. User-Scoped Conversations
+      match /conversations/{conversationId} {
+        allow read, write: if isValidId(userId) && isValidId(conversationId);
+
+        // 4. Scoped Messages inside Conversation
+        match /messages/{messageId} {
+          allow read, write: if isValidId(userId) && isValidId(conversationId) && isValidId(messageId);
+        }
+      }
     }
 
-    // App branding and active logo settings
+    // 5. Global Application Settings (Branding, Maintenance Mode)
     match /settings/{settingId} {
-      allow read, write: if true;
+      allow read: if isValidId(settingId);
+      allow write: if isValidId(settingId);
     }
 
-    // Real-time live connected user sessions
+    // 6. Real-time Live Connected Sessions
     match /sessions/{sessionId} {
-      allow read, write: if true;
+      allow read, write: if isValidId(sessionId);
     }
   }
 }

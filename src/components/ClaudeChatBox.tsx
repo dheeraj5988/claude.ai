@@ -28,6 +28,7 @@ interface ClaudeChatBoxProps {
   placeholder?: string;
   autoFocus?: boolean;
   isDocked?: boolean;
+  activeSessionId?: string;
 }
 
 export const ClaudeChatBox: React.FC<ClaudeChatBoxProps> = ({
@@ -41,9 +42,10 @@ export const ClaudeChatBox: React.FC<ClaudeChatBoxProps> = ({
   thinkingEnabled = true,
   onToggleThinking,
   onOpenCoworkModal,
-  placeholder,
+  placeholder = 'How can Claude help you today?',
   autoFocus = false,
   isDocked = false,
+  activeSessionId,
 }) => {
   const [input, setInput] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -58,6 +60,26 @@ export const ClaudeChatBox: React.FC<ClaudeChatBoxProps> = ({
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Preserve unsent draft when switching conversations
+  useEffect(() => {
+    if (activeSessionId) {
+      const savedDraft = localStorage.getItem(`claude_draft_${activeSessionId}`);
+      setInput(savedDraft !== null ? savedDraft : '');
+    }
+  }, [activeSessionId]);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    setInput(val);
+    if (activeSessionId) {
+      if (val) {
+        localStorage.setItem(`claude_draft_${activeSessionId}`, val);
+      } else {
+        localStorage.removeItem(`claude_draft_${activeSessionId}`);
+      }
+    }
+  };
 
   // Model name formatting for button label
   const getModelLabel = () => {
@@ -102,8 +124,18 @@ export const ClaudeChatBox: React.FC<ClaudeChatBoxProps> = ({
     }
   }, [input, isDocked]);
 
+  const lastSendTimeRef = useRef<number>(0);
+
   const handleSend = () => {
+    const now = Date.now();
+    if (now - lastSendTimeRef.current < 600) return; // Debounce rapid-fire sends
     if ((!input.trim() && attachments.length === 0) || isStreaming) return;
+    lastSendTimeRef.current = now;
+    if (activeSessionId) {
+      try {
+        localStorage.removeItem(`claude_draft_${activeSessionId}`);
+      } catch {}
+    }
     onSendMessage(input, attachments);
     setInput('');
     setAttachments([]);
@@ -224,7 +256,7 @@ export const ClaudeChatBox: React.FC<ClaudeChatBoxProps> = ({
             <textarea
               ref={textareaRef}
               value={input}
-              onChange={e => setInput(e.target.value)}
+              onChange={handleInputChange}
               onKeyDown={handleKeyDown}
               placeholder={placeholder || 'Write a message...'}
               rows={1}
@@ -352,7 +384,7 @@ export const ClaudeChatBox: React.FC<ClaudeChatBoxProps> = ({
           <textarea
             ref={textareaRef}
             value={input}
-            onChange={e => setInput(e.target.value)}
+            onChange={handleInputChange}
             onKeyDown={handleKeyDown}
             placeholder={placeholder || 'How can I help you today?'}
             rows={2}
